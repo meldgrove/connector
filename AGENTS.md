@@ -31,7 +31,7 @@ apps/server/src/
   config.ts        every environment variable (zod); read only via config()
   db/schema/       Drizzle schema (auth.ts, app.ts)
   auth/            Better Auth, sign-in check and groups, credentials (tokens), principals
-  sources/         sources (service.ts), one adapter per kind, the index, webhooks, linked accounts
+  sources/         sources (service.ts), source use (use.ts), one adapter per kind, the index, webhooks, linked accounts
   search/          federation: search, fetch, context, recent, activity log
   directory/       groups, Keycloak directory sync, people directory
   scim/            SCIM 2.0 server
@@ -51,10 +51,11 @@ packages/shared/src/  contracts, source kinds and order, limits
   `packages/shared/src/api/` and use it on both sides; routes validate input
   with it (`jsonBody`, `queryOf`).
 - **Access before content.** Every route starts with `requirePrincipal`,
-  `requireUser`, `requireWebUser` or `requireAdmin`. Every read of a source
-  goes through `usableSources` or `mayUse` (`sources/service.ts`) before an
-  adapter runs; adapters apply the app's own rules (Library team notes,
-  Handbook drafts). Agents act as their person and never administer;
+  `requireUser`, `requireWebUser` or `requireAdmin`. Adapters run only
+  through `sources/use.ts`: `useSource` and `useSources` check `mayUse`
+  before an adapter runs, and admin pages and the worker use
+  `administerSource` (Connector's own credentials, never a person's);
+  adapters apply the app's own rules (Library team notes, Handbook drafts). Agents act as their person and never administer;
   service tokens read only sources opened to them and only items meant for
   everyone.
 - **Every kind of information keeps its home.** Live sources are asked at
