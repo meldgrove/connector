@@ -6,13 +6,13 @@ groups and tokens.
 
 ## Roles
 
-| Who                                     | May                                                                                                                                                                                          |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Everyone signed in                      | Search, read and get context from the sources open to them; look up colleagues; link their Handbook account; connect agents.                                                                 |
-| Admin                                   | Also: connect sources and decide who may use them; people, groups, the directory; service and SCIM tokens; the audit and activity logs. Admins search a source only when it is open to them. |
-| Agent (personal token or connected app) | Acts as its person: the same sources and items; proposes Handbook changes for review; never administers.                                                                                     |
-| Service token                           | Bots such as the Support Agent: reads only sources opened to service tokens, and only content meant for everyone there.                                                                      |
-| SCIM token                              | Identity systems such as Meldgrove IAM: people and groups at `/scim/v2`, nothing else.                                                                                                       |
+| Who                                     | May                                                                                                                                                                                                   |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Everyone signed in                      | Search, read and get context from the sources open to them; look up colleagues; link their Handbook account; connect agents.                                                                          |
+| Admin                                   | Also: connect sources and decide who may use them; people, groups, the directory; service and SCIM tokens; the audit and activity logs; updates. Admins search a source only when it is open to them. |
+| Agent (personal token or connected app) | Acts as its person: the same sources and items; proposes Handbook changes for review; never administers.                                                                                              |
+| Service token                           | Bots such as the Support Agent: reads only sources opened to service tokens, and only content meant for everyone there.                                                                               |
+| SCIM token                              | Identity systems such as Meldgrove IAM: people and groups at `/scim/v2`, nothing else.                                                                                                                |
 
 Admins come from `ADMIN_EMAILS` (always admins, also the way back in) or are
 made admins by another admin under **Administration → People**. There,

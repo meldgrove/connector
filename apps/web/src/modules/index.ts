@@ -8,6 +8,7 @@ import { routes as oauth, rootRoutes as oauthRoot } from "./oauth/routes";
 import { routes as people } from "./people/people-page";
 import { routes as search } from "./search/routes";
 import { routes as settings } from "./settings/routes";
+import { routes as updates } from "./updates/routes";
 
 /** Routes of every module inside the signed-in app. Add new modules here. */
 export const appRoutes: AnyRoute[] = [
@@ -19,6 +20,7 @@ export const appRoutes: AnyRoute[] = [
   ...settings,
   ...admin,
   ...audit,
+  ...updates,
   ...oauth,
 ];
 

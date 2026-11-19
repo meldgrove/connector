@@ -28,9 +28,9 @@ orders results by which source wins when they disagree.
   the Keycloak Admin API for people and groups, SCIM 2.0 for identity
   systems such as Meldgrove IAM, OAuth 2.1 and MCP for agents, OAuth 2.1
   with dynamic client registration for linked accounts.
-- **Easy to run.** A setup guide per app, and a status page that shows
-  what needs an admin: a failing source, a token about to expire, a
-  stopped sync.
+- **Easy to run.** A setup guide per app, a status page that shows what
+  needs an admin (a failing source, a token about to expire, a stopped
+  sync), and automatic updates with an update button for admins.
 - **Oversight.** An activity log of what agents and bots asked and which
   sources answered, an audit log of admin changes, error reports to Sentry
   without personal data.

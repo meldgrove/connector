@@ -25,7 +25,9 @@ Each [release](https://github.com/meldgrove/connector/releases) publishes the
 image `ghcr.io/meldgrove/connector` for linux/amd64 and linux/arm64, tagged
 with its version (`0.1.0`), its series (`0.1`; from 1.0.0 the major version,
 `1`) and `latest`. A release that needs manual steps starts a new series, so
-the releases within a series install without anyone acting.
+the releases within a series install without anyone acting. Every change on
+`main` whose checks pass is published as a preview, tagged `0.1.1-preview.3`
+(three changes after 0.1.0) and `preview`.
 
 | File                    | Contains                                                                           |
 | ----------------------- | ---------------------------------------------------------------------------------- |
@@ -156,7 +158,8 @@ hears when the app is down.
    - **Debian:** in `/srv/connector`, run `git pull` (the newest release's
      `compose.yaml`), change `CONNECTOR_VERSION` in `.env`, and run
      `docker compose up -d --pull always`. With
-     [automatic updates](#on-debian), run `git pull`, then
+     [automatic updates](#on-debian), run `git pull`, then install it with
+     the update button (**Install anyway…**) or
      `docker compose exec updater updater install <version>` instead: it
      goes back to the version before if the new one does not become
      healthy.
@@ -174,19 +177,25 @@ keeps Connector current. On Debian, it follows one of two channels:
   installs within the hour, `7d` waits a week). A release with upgrade steps
   starts a new series: the updater reports it, but never installs it on its
   own.
-- **Preview**: meant for previews of unreleased changes, which Connector
-  does not publish yet. Until then it installs every release within the
-  hour, also those with upgrade steps.
+- **Preview**: every change on `main` as soon as its checks pass, before it
+  is released, and every release. Previews install within the hour. New
+  features first, and now and then a new bug; previews have no release
+  notes.
 
 With `UPDATE_WINDOW` (such as `02:00-05:00`, in the time zone `TZ`),
 automatic installs happen only then. Switching from Preview back to Stable
 installs nothing and never goes back to an older version.
 
-Connector has no update button in the app yet. On the server,
-`docker compose exec updater updater status` shows the installed version,
-the channel and the available update, and `docker compose logs updater` says
-what the updater did. Never publish the updater's port: its API has no
-authentication.
+**The update button:** admins see an update icon in the header. It checks on
+click, shows an available update with its changes, installs it on request
+(**Install now**), shows the progress, reloads the page when the new version
+runs, and says why an installation failed. With automatic updates off on
+the server, it still shows new releases, but nothing installs from the app.
+Admins choose the channel under **Administration → Updates**. The app
+reaches the updater at `UPDATER_URL` (`http://updater:8080` in
+`compose.yaml`). On the server, `docker compose exec updater updater status`
+shows the same, and `docker compose logs updater` says what the updater
+did. Never publish the updater's port: its API has no authentication.
 
 Set up [backups](#backups) first: migrations run without anyone watching.
 
@@ -194,7 +203,8 @@ Set up [backups](#backups) first: migrations run without anyone watching.
 
 On Coolify, the image tag in `CONNECTOR_VERSION` decides what installs: a
 series such as `0.1` gets its releases, `latest` every release (also those
-with upgrade steps). The channel cannot be changed.
+with upgrade steps), `preview` every preview (the unstable channel). Admins
+cannot switch the channel in the app.
 
 1. Under Settings > Advanced, turn on API Access if it is off.
 2. Under Keys & Tokens > API Tokens, create a token with only the `deploy`
@@ -231,6 +241,7 @@ docker compose exec updater updater channel preview   # or stable
 docker compose exec updater updater install 0.2.0     # now, also a new series
 ```
 
+The update button and **Administration → Updates** do the same in the app.
 A version that failed to install is not tried again automatically; a newer
 one is.
 

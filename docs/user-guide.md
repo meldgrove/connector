@@ -64,3 +64,11 @@ an admin if a source is missing.
 - **Directory**: the Keycloak sync, SCIM tokens for Meldgrove IAM, groups.
 - **Service tokens**: bots such as the Support Agent.
 - **Activity**: what agents and bots asked. **Audit log**: admin changes.
+- **Updates**: the installed version and the channel: **Stable**
+  (releases, recommended) or **Preview** (every change before it is
+  released). An update icon in the header shows a new version with a dot:
+  click it for the changes and **Install now**. Connector restarts for a
+  moment, and the page reloads when the new version runs. A warning
+  triangle means an installation failed; the icon says why, and the
+  version before keeps running. The server must run the updater
+  ([Deployment](deployment.md#automatic-updates)).
