@@ -94,20 +94,22 @@ export async function setDirectoryActive(tx: DbOrTx, userId: string, active: boo
 /**
  * Gives a person a new address (the directory's change). Admin rights from
  * ADMIN_EMAILS belong to the address: they stay only if the new address is
- * in ADMIN_EMAILS too. Callers check that nobody else has the address.
+ * in ADMIN_EMAILS too. Decided by the row as it is when written (a sign-in
+ * may have made the person admin since the caller read it). Callers check
+ * that nobody else has the address.
  */
-export async function changeEmail(
-  tx: DbOrTx,
-  user: { id: string; adminSource: string | null },
-  email: string,
-) {
+export async function changeEmail(tx: DbOrTx, user: { id: string }, email: string) {
+  const fromEnvironment = sql`${users.adminSource} = 'environment'`;
   await tx
     .update(users)
     .set({
       email,
-      ...(user.adminSource === "environment" && !isEnvironmentAdmin(email)
-        ? { isAdmin: false, adminSource: null }
-        : {}),
+      ...(isEnvironmentAdmin(email)
+        ? {}
+        : {
+            isAdmin: sql`case when ${fromEnvironment} then false else ${users.isAdmin} end`,
+            adminSource: sql`case when ${fromEnvironment} then null else ${users.adminSource} end`,
+          }),
       updatedAt: sql`now()`,
     })
     .where(eq(users.id, user.id));
