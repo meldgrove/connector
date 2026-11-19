@@ -97,9 +97,13 @@ PostgreSQL holds everything (`apps/server/src/db/schema/`).
 `sources/service.ts` decides which sources a principal may use
 (`mayUse`): enabled, and for a person no access groups or one of them
 (`directory/groups.ts`, `inAnyGroup`: subgroups count); for a service token
-`service_access`. Every read goes through `usableSources` or `mayUse`
-before an adapter runs; `fetch` of a closed source answers 404 like an
-unknown item.
+`service_access`. Adapters run only through `sources/use.ts`: `useSources`
+and `useSource` check `mayUse` themselves, so `fetch` of a closed source
+answers 404 like an unknown item; admin pages and the worker use
+`administerSource`, as Connector itself with the source's own credentials,
+never a person's. Every use has a time budget and ends in an outcome (ok,
+count, time, error), whether it worked or not, for the answer and the
+activity log.
 
 Inside a source:
 
@@ -120,10 +124,10 @@ agents.
 
 ## Search
 
-`search/federate.ts` runs every usable source's adapter at the same time,
-each with its own `SOURCE_TIMEOUT_SECONDS` budget, and reports each
-source's outcome (ok, count, time, error). A failing or slow source never
-fails the request.
+`search/federate.ts` asks every usable source at the same time
+(`useSources`), each with its own `SOURCE_TIMEOUT_SECONDS` budget, and
+reports each source's outcome. A failing or slow source never fails the
+request.
 
 - **Merge** (`mergeResults`): round-robin by each source's own rank; within
   a round the stronger authority first, then the source's place in the

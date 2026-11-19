@@ -8,7 +8,7 @@ import { logger } from "../logger";
 import type { DbOrTx } from "../db/client";
 import { items } from "../db/schema";
 import type { Principal } from "../auth/principal";
-import type { Adapter, FetchedItem, Hit } from "./types";
+import { SourceError, type Adapter, type FetchedItem, type Hit } from "./types";
 
 /*
  * The index of webhook sources: what Logbook and Library sent, searchable
@@ -199,7 +199,7 @@ export function indexAdapter(
         .where(eq(items.sourceId, context.source.id));
       const secret = context.secret.webhookSecret;
       if (typeof secret !== "string" || secret === "") {
-        throw new Error("Set a webhook secret, then the same value as WEBHOOK_SECRET in the app");
+        throw new SourceError("Set a webhook secret, then the same value as WEBHOOK_SECRET in the app");
       }
       const last = context.source.lastDeliveryAt;
       return last

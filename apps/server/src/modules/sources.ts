@@ -6,7 +6,6 @@ import {
   type HandbookSpaceList,
   type Link,
 } from "@connector/shared/api/sources";
-import { config } from "../config";
 import { getDb } from "../db/client";
 import { sourceLinks, sources } from "../db/schema";
 import type { AppEnv } from "../http/env";
@@ -16,7 +15,6 @@ import { logger } from "../logger";
 import { handbookSpaces } from "../sources/handbook";
 import { finishLink, mayLink, startLink, unlink } from "../sources/links";
 import {
-  adapterContext,
   checkSource,
   createSource,
   deleteSource,
@@ -28,6 +26,7 @@ import {
   updateSource,
 } from "../sources/service";
 import { SourceError } from "../sources/types";
+import { administerSource } from "../sources/use";
 
 /** Sources (admins) and linked accounts (everyone in the web app). */
 const router = new Hono<AppEnv>();
@@ -59,24 +58,19 @@ router.delete("/admin/sources/:id", async (c) => {
 });
 
 router.post("/admin/sources/:id/check", async (c) => {
-  const actor = requireAdmin(c);
-  return c.json(await checkSource(getDb(), actor, idParam(c)));
+  requireAdmin(c);
+  return c.json(await checkSource(getDb(), idParam(c)));
 });
 
 /** Handbook's spaces, for choosing the rule spaces (setup guide). */
 router.get("/admin/sources/:id/spaces", async (c) => {
-  const actor = requireAdmin(c);
+  requireAdmin(c);
   const row = await getSource(getDb(), idParam(c));
   if (row.kind !== "handbook") throw conflict("Only Handbook sources have spaces");
-  const signal = AbortSignal.timeout(config().SOURCE_TIMEOUT_SECONDS * 1000);
-  try {
-    const items = await handbookSpaces(adapterContext(getDb(), row, actor, signal));
-    const body: HandbookSpaceList = { items };
-    return c.json(body);
-  } catch (error) {
-    if (error instanceof SourceError) throw conflict(error.message);
-    throw error;
-  }
+  const use = await administerSource(getDb(), row, (_, context) => handbookSpaces(context));
+  if (!use.ok) throw conflict(use.error.message);
+  const body: HandbookSpaceList = { items: use.value };
+  return c.json(body);
 });
 
 router.post("/admin/sources/:id/webhook-secret", async (c) => {

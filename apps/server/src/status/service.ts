@@ -53,6 +53,8 @@ type Requests = {
 /**
  * Requests of agents and bots per source slug in the last 24 hours (the
  * activity log), since the current source with that slug was created.
+ * Reads only: a proposal that fails says more about the proposal (a page
+ * that moved, no linked account) than about the source.
  */
 async function requestsBySlug(db: Db): Promise<Map<string, Requests>> {
   const { rows } = await db.execute<{
@@ -74,7 +76,7 @@ async function requestsBySlug(db: Db): Promise<Map<string, Requests>> {
     from ${activity} a
       cross join lateral jsonb_array_elements(a.sources) s
       join ${sources} src on src.slug = s->>'slug' and a.created_at >= src.created_at
-    where a.created_at > now() - interval '24 hours'
+    where a.created_at > now() - interval '24 hours' and a.action <> 'propose'
     group by 1`);
   return new Map(
     rows.map((row) => [
