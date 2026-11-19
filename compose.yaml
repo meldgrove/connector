@@ -93,12 +93,12 @@ services:
       retries: 3
       start_period: 30s
 
-  # Automatic updates (docs/deployment.md): installs nothing until
-  # UPDATE_DEPLOY_HOOK_URL is set (Coolify: the image tag set there decides)
-  # or the server watches the volume `updater` (Debian: `updater host-setup`;
-  # the channel is Stable or Preview, and the server writes each version it
-  # installs into CONNECTOR_VERSION). Its API has no authentication: never
-  # publish a port.
+  # Automatic updates and the update button of admins (docs/deployment.md):
+  # installs nothing until UPDATE_DEPLOY_HOOK_URL is set (Coolify: the image
+  # tag set there decides) or the server watches the volume `updater`
+  # (Debian: `updater host-setup`; admins choose Stable or Preview in the
+  # app, and the server writes each version it installs into
+  # CONNECTOR_VERSION). Only the app reaches its API: never publish a port.
   updater:
     image: ghcr.io/meldgrove/updater:0.2
     pull_policy: ${PULL_POLICY:-missing}
