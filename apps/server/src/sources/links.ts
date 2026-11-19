@@ -81,8 +81,7 @@ async function getJson<T extends z.ZodType>(url: string, schema: T): Promise<z.i
     throw new SourceError(`Could not reach ${new URL(url).origin}: ${fetchErrorCode(error)}`);
   }
   // Fixed words: the address can come from the source's metadata (and end up in the activity log).
-  if (!response.ok)
-    throw new SourceError(`The source's sign-in metadata answered HTTP ${response.status}`, response.status);
+  if (!response.ok) throw new SourceError(`The source's sign-in metadata answered HTTP ${response.status}`);
   const parsed = schema.safeParse(await response.json().catch(() => null));
   if (!parsed.success)
     throw new SourceError("The source's sign-in metadata is not what Connector understands");
