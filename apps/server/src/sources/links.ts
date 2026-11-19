@@ -8,7 +8,7 @@ import { decryptJson, decryptSecret, encryptJson, encryptSecret } from "../core/
 import { logger } from "../logger";
 import type { UserPrincipal } from "../auth/principal";
 import { mayUse } from "./service";
-import { fetchErrorCode } from "./http";
+import { sourceFetch } from "./http";
 import { SourceError, type SourceRow } from "./types";
 
 /*
@@ -21,7 +21,8 @@ import { SourceError, type SourceRow } from "./types";
  * refreshing takes a row lock, because a refresh token works once.
  */
 
-const TIMEOUT_MS = 10_000;
+/** Linking and unlinking in the web app: discovery, registration and the token request together. */
+const FLOW_TIMEOUT_MS = 20_000;
 const REQUEST_MINUTES = 10;
 const DISCOVERY_CACHE_MS = 60 * 60_000;
 
@@ -69,64 +70,67 @@ function sameOrigin(source: SourceRow, address: string): boolean {
   }
 }
 
-async function getJson<T extends z.ZodType>(url: string, schema: T): Promise<z.infer<T>> {
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      headers: { accept: "application/json" },
-      redirect: "manual",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-  } catch (error) {
-    throw new SourceError(`Could not reach ${new URL(url).origin}: ${fetchErrorCode(error)}`);
-  }
+async function getJson<T extends z.ZodType>(
+  source: SourceRow,
+  url: string,
+  schema: T,
+  signal: AbortSignal,
+): Promise<z.infer<T>> {
+  const answer = await sourceFetch(url, { signal, app: source.name });
   // Fixed words: the address can come from the source's metadata (and end up in the activity log).
-  if (!response.ok) throw new SourceError(`The source's sign-in metadata answered HTTP ${response.status}`);
-  const parsed = schema.safeParse(await response.json().catch(() => null));
+  if (!answer.ok) throw new SourceError(`The source's sign-in metadata answered HTTP ${answer.status}`);
+  const parsed = schema.safeParse(answer.data);
   if (!parsed.success)
     throw new SourceError("The source's sign-in metadata is not what Connector understands");
   return parsed.data;
 }
 
+/** An OAuth request; 400 and 401 mean the server refused the grant or the client. */
 async function postForm<T extends z.ZodType>(
+  source: SourceRow,
   url: string,
   form: Record<string, string>,
   schema: T,
+  signal: AbortSignal,
 ): Promise<z.infer<T>> {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
-    body: new URLSearchParams(form),
-    redirect: "manual",
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  }).catch((error: unknown) => {
-    throw new SourceError(`Could not reach ${new URL(url).origin}: ${fetchErrorCode(error)}`);
-  });
-  const body: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const code = (body as { error?: unknown } | null)?.error;
+  const answer = await sourceFetch(url, { signal, app: source.name, form });
+  if (!answer.ok) {
+    const code = (answer.data as { error?: unknown } | null)?.error;
     throw new SourceError(
-      `The sign-in server refused: ${typeof code === "string" ? code : `HTTP ${response.status}`}`,
-      response.status,
+      `The sign-in server refused: ${typeof code === "string" ? code : `HTTP ${answer.status}`}`,
+      {
+        kind: answer.status === 400 || answer.status === 401 ? "refused" : "failed",
+        diagnostic: "The sign-in server refused",
+      },
     );
   }
-  const parsed = schema.safeParse(body);
+  const parsed = schema.safeParse(answer.data);
   if (!parsed.success)
     throw new SourceError("The sign-in server sent an answer Connector does not understand");
   return parsed.data;
 }
 
 /** The source's protected resource and authorization server, cached for an hour. */
-export async function discover(source: SourceRow): Promise<Discovery> {
+export async function discover(source: SourceRow, signal: AbortSignal): Promise<Discovery> {
   const base = baseUrlOf(source);
   const cached = discoveries.get(base);
   if (cached && Date.now() - cached.at < DISCOVERY_CACHE_MS) return cached.value;
-  const resource = await getJson(`${base}/.well-known/oauth-protected-resource`, resourceMetadataSchema);
+  const resource = await getJson(
+    source,
+    `${base}/.well-known/oauth-protected-resource`,
+    resourceMetadataSchema,
+    signal,
+  );
   const issuer = resource.authorization_servers[0]!.replace(/\/+$/, "");
   if (!sameOrigin(source, issuer)) {
     throw new SourceError("The source's sign-in server is on another address than the source");
   }
-  const server = await getJson(`${issuer}/.well-known/oauth-authorization-server`, serverMetadataSchema);
+  const server = await getJson(
+    source,
+    `${issuer}/.well-known/oauth-authorization-server`,
+    serverMetadataSchema,
+    signal,
+  );
   if (!(server.code_challenge_methods_supported ?? []).includes("S256")) {
     throw new SourceError("The source's sign-in server does not support PKCE (S256)");
   }
@@ -147,7 +151,12 @@ export async function discover(source: SourceRow): Promise<Discovery> {
 }
 
 /** Connector's registration at the source (dynamic client registration), made once. */
-async function oauthClient(db: DbOrTx, source: SourceRow, discovery: Discovery): Promise<OAuthClient> {
+async function oauthClient(
+  db: DbOrTx,
+  source: SourceRow,
+  discovery: Discovery,
+  signal: AbortSignal,
+): Promise<OAuthClient> {
   const fits = (stored: Partial<OAuthClient>): stored is OAuthClient =>
     Boolean(stored.clientId) &&
     stored.issuer === discovery.server.issuer &&
@@ -171,10 +180,10 @@ async function oauthClient(db: DbOrTx, source: SourceRow, discovery: Discovery):
     if (!discovery.server.registration_endpoint) {
       throw new SourceError("The source's sign-in server does not offer dynamic client registration");
     }
-    const response = await fetch(discovery.server.registration_endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify({
+    const answer = await sourceFetch(discovery.server.registration_endpoint, {
+      signal,
+      app: source.name,
+      json: {
         client_name: /^(meldgrove )?connector$/i.test(config().APP_NAME)
           ? "Meldgrove Connector"
           : `${config().APP_NAME} (Meldgrove Connector)`,
@@ -183,18 +192,14 @@ async function oauthClient(db: DbOrTx, source: SourceRow, discovery: Discovery):
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
         token_endpoint_auth_method: "client_secret_post",
-      }),
-      redirect: "manual",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
-    }).catch((error: unknown) => {
-      throw new SourceError(`Could not reach the source to register: ${fetchErrorCode(error)}`);
+      },
     });
-    const body: unknown = await response.json().catch(() => null);
-    const parsed = registrationSchema.safeParse(body);
-    if (!response.ok || !parsed.success) {
-      const description = (body as { error_description?: unknown } | null)?.error_description;
+    const parsed = registrationSchema.safeParse(answer.data);
+    if (!answer.ok || !parsed.success) {
+      const description = (answer.data as { error_description?: unknown } | null)?.error_description;
       throw new SourceError(
         `The source refused Connector's registration${typeof description === "string" ? `: ${description.slice(0, 200)}` : ""}`,
+        { diagnostic: "The source refused Connector's registration" },
       );
     }
     const client: OAuthClient = {
@@ -215,8 +220,9 @@ const sha256 = (value: string) => createHash("sha256").update(value).digest("hex
 
 /** Starts linking: the URL of the source's consent screen. */
 export async function startLink(db: Db, source: SourceRow, userId: string): Promise<string> {
-  const discovery = await discover(source);
-  const client = await oauthClient(db, source, discovery);
+  const signal = AbortSignal.timeout(FLOW_TIMEOUT_MS);
+  const discovery = await discover(source, signal);
+  const client = await oauthClient(db, source, discovery, signal);
   const state = randomBytes(32).toString("base64url");
   const verifier = randomBytes(32).toString("base64url");
   const challenge = createHash("sha256").update(verifier).digest("base64url");
@@ -255,16 +261,20 @@ function tokensOf(answer: z.infer<typeof tokenSchema>, previous?: Tokens): Token
 }
 
 /** Who the account is at the source, for the settings page (Meldgrove apps: GET /api/v1/me). */
-async function accountLabel(source: SourceRow, accessToken: string): Promise<string | null> {
+async function accountLabel(
+  source: SourceRow,
+  accessToken: string,
+  signal: AbortSignal,
+): Promise<string | null> {
   try {
-    const response = await fetch(`${baseUrlOf(source)}/api/v1/me`, {
-      headers: { authorization: `Bearer ${accessToken}`, accept: "application/json" },
-      redirect: "manual",
-      signal: AbortSignal.timeout(TIMEOUT_MS),
+    const answer = await sourceFetch(`${baseUrlOf(source)}/api/v1/me`, {
+      signal,
+      app: source.name,
+      token: accessToken,
     });
-    if (!response.ok) return null;
-    const me = (await response.json()) as { email?: unknown; name?: unknown };
-    return typeof me.email === "string" ? me.email : typeof me.name === "string" ? me.name : null;
+    if (!answer.ok) return null;
+    const me = answer.data as { email?: unknown; name?: unknown } | null;
+    return typeof me?.email === "string" ? me.email : typeof me?.name === "string" ? me.name : null;
   } catch {
     return null;
   }
@@ -295,12 +305,14 @@ export async function finishLink(
       query.error === "access_denied" ? "You declined the link" : `The source refused: ${query.error}`,
     );
   if (!query.code) throw new SourceError("The source sent no authorization code");
-  const discovery = await discover(source);
+  const signal = AbortSignal.timeout(FLOW_TIMEOUT_MS);
+  const discovery = await discover(source, signal);
   if (query.iss && query.iss.replace(/\/+$/, "") !== discovery.server.issuer.replace(/\/+$/, "")) {
     throw new SourceError("The answer came from another sign-in server");
   }
-  const client = await oauthClient(db, source, discovery);
+  const client = await oauthClient(db, source, discovery, signal);
   const answer = await postForm(
+    source,
     discovery.server.token_endpoint,
     {
       grant_type: "authorization_code",
@@ -311,9 +323,10 @@ export async function finishLink(
       ...clientAuth(client),
     },
     tokenSchema,
+    signal,
   );
   const tokens = tokensOf(answer);
-  const label = await accountLabel(source, tokens.accessToken);
+  const label = await accountLabel(source, tokens.accessToken, signal);
   await db.transaction(async (tx) => {
     // The tokens belong to the address the link started at; a source moved meanwhile gets none.
     const [now] = await tx
@@ -340,7 +353,12 @@ export async function finishLink(
  * minute; null without a link, or when the source ended it (the link is then
  * removed and the person links again).
  */
-export async function linkedAccessToken(db: Db, source: SourceRow, userId: string): Promise<string | null> {
+export async function linkedAccessToken(
+  db: Db,
+  source: SourceRow,
+  userId: string,
+  signal: AbortSignal,
+): Promise<string | null> {
   if (source.kind !== "handbook" || source.config.allowLinking === false) return null;
   const [link] = await db
     .select()
@@ -349,13 +367,18 @@ export async function linkedAccessToken(db: Db, source: SourceRow, userId: strin
   if (!link) return null;
   const tokens = decryptJson<Tokens>(link.tokensEncrypted) as Tokens;
   if (tokens.expiresAt - Date.now() > 60_000) return tokens.accessToken;
-  return refresh(db, source, link.id);
+  return refresh(db, source, link.id, signal);
 }
 
-async function refresh(db: Db, source: SourceRow, linkId: string): Promise<string | null> {
+async function refresh(
+  db: Db,
+  source: SourceRow,
+  linkId: string,
+  signal: AbortSignal,
+): Promise<string | null> {
   // Registration (if any) before the transaction, so the source lock below stays shared.
-  const discovery = await discover(source);
-  const client = await oauthClient(db, source, discovery);
+  const discovery = await discover(source, signal);
+  const client = await oauthClient(db, source, discovery, signal);
   return db.transaction(async (tx) => {
     // Source row first (shared: refreshes of different links run side by
     // side), then the link: the order every change of a source takes.
@@ -371,6 +394,7 @@ async function refresh(db: Db, source: SourceRow, linkId: string): Promise<strin
     }
     try {
       const answer = await postForm(
+        source,
         discovery.server.token_endpoint,
         {
           grant_type: "refresh_token",
@@ -379,6 +403,7 @@ async function refresh(db: Db, source: SourceRow, linkId: string): Promise<strin
           ...clientAuth(client),
         },
         tokenSchema,
+        signal,
       );
       const next = tokensOf(answer, tokens);
       await tx
@@ -387,7 +412,7 @@ async function refresh(db: Db, source: SourceRow, linkId: string): Promise<strin
         .where(eq(sourceLinks.id, linkId));
       return next.accessToken;
     } catch (error) {
-      if (error instanceof SourceError && (error.status === 400 || error.status === 401)) {
+      if (error instanceof SourceError && error.kind === "refused") {
         logger.info({ linkId }, "the source ended a linked account; removed");
         await tx.delete(sourceLinks).where(eq(sourceLinks.id, linkId));
         return null;
@@ -406,17 +431,27 @@ export async function unlink(db: Db, source: SourceRow, userId: string): Promise
   if (!link) return false;
   try {
     const tokens = decryptJson<Tokens>(link.tokensEncrypted) as Tokens;
-    const discovery = await discover(source);
+    const signal = AbortSignal.timeout(FLOW_TIMEOUT_MS);
+    const discovery = await discover(source, signal);
     if (discovery.server.revocation_endpoint && tokens.refreshToken) {
-      const client = await oauthClient(db, source, discovery);
+      const client = await oauthClient(db, source, discovery, signal);
       await postForm(
+        source,
         discovery.server.revocation_endpoint,
         { token: tokens.refreshToken, token_type_hint: "refresh_token", ...clientAuth(client) },
         z.unknown(),
+        signal,
       );
     }
   } catch (error) {
-    logger.info({ err: error, sourceId: source.id }, "could not revoke a linked account at the source");
+    // A source's failure in Connector's own words: its answer could echo the token.
+    if (error instanceof SourceError) {
+      logger.info(
+        { sourceId: source.id, reason: error.diagnostic },
+        "could not revoke a linked account at the source",
+      );
+    } else
+      logger.warn({ err: error, sourceId: source.id }, "could not revoke a linked account at the source");
   }
   return true;
 }

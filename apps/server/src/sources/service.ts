@@ -11,7 +11,7 @@ import { SOURCE_KIND_INFO, type SourceKind } from "@connector/shared/sources";
 import { config } from "../config";
 import type { Db } from "../db/client";
 import { items, linkRequests, sourceLinks, sources } from "../db/schema";
-import type { Principal, ServicePrincipal, UserPrincipal } from "../auth/principal";
+import type { Principal, UserPrincipal } from "../auth/principal";
 import { decryptJson, encryptJson, secretHint, SecretDecryptionError } from "../core/crypto";
 import { audit } from "../core/audit";
 import { putSetting } from "../core/settings";
@@ -19,7 +19,8 @@ import { inAnyGroup } from "../directory/groups";
 import { conflict, notFound, validationError, zodFieldErrors } from "../http/errors";
 import { logger } from "../logger";
 import { KINDS, isSourceKind } from "./registry";
-import type { AdapterContext, SourceRow } from "./types";
+import type { SourceRow } from "./types";
+import { administerSource } from "./use";
 
 /*
  * Sources: connected apps, their settings and secrets, and who may use
@@ -305,15 +306,6 @@ export async function rotateWebhookSecret(
   return { webhookSecret, createdAt: new Date(after!.ms).toISOString() };
 }
 
-export function adapterContext(
-  db: Db,
-  row: SourceRow,
-  principal: Principal,
-  signal: AbortSignal,
-): AdapterContext {
-  return { db, source: row, config: row.config, secret: secretOf(row), principal, signal };
-}
-
 /**
  * A status `{ at, ok, message }` stamped with the database's time, like
  * deliveries and webhook secrets, so the setup guide compares one clock.
@@ -328,30 +320,20 @@ export async function recordStatus(db: Db, id: string, ok: boolean, message: str
     .where(eq(sources.id, id));
 }
 
-async function runCheck(db: Db, row: SourceRow, principal: Principal): Promise<SourceCheck> {
-  const adapter = KINDS[kindOf(row)].adapter;
-  const signal = AbortSignal.timeout(config().SOURCE_TIMEOUT_SECONDS * 1000 + 5000);
-  let result: SourceCheck;
-  try {
-    result = { ok: true, message: await adapter.check(adapterContext(db, row, principal, signal)) };
-  } catch (error) {
-    result = { ok: false, message: error instanceof Error ? error.message : "The check failed" };
-  }
+/** A check uses only the source's own credentials (service token, API key), never a person's. */
+async function runCheck(db: Db, row: SourceRow): Promise<SourceCheck> {
+  const use = await administerSource(db, row, (adapter, context) => adapter.check(context), "check");
+  const result: SourceCheck = use.ok
+    ? { ok: true, message: use.value }
+    : { ok: false, message: use.error.message };
   await recordStatus(db, row.id, result.ok, result.message);
   return result;
 }
 
 /** Checks a source's address and credentials and stores the outcome. */
-export async function checkSource(db: Db, actor: UserPrincipal, id: string): Promise<SourceCheck> {
-  return runCheck(db, await getSource(db, id), actor);
+export async function checkSource(db: Db, id: string): Promise<SourceCheck> {
+  return runCheck(db, await getSource(db, id));
 }
-
-/** The worker's checks use only each source's own credentials (service token, API key). */
-const WORKER: ServicePrincipal = {
-  kind: "service",
-  credentialId: "00000000-0000-0000-0000-000000000000",
-  name: "Connector",
-};
 
 /**
  * Checks every enabled live source (SOURCE_CHECK_MINUTES), so a refused
@@ -362,7 +344,7 @@ export async function checkLiveSources(db: Db): Promise<number> {
   const rows = (await db.select().from(sources).where(eq(sources.enabled, true))).filter(
     (row) => !isWebhookKind(row.kind),
   );
-  await Promise.all(rows.map((row) => runCheck(db, row, WORKER)));
+  await Promise.all(rows.map((row) => runCheck(db, row)));
   await putSetting(db, SOURCE_CHECKS_SETTING, { at: new Date().toISOString() });
   return rows.length;
 }

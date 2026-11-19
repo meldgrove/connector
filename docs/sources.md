@@ -53,7 +53,7 @@ every 30 seconds:
 | State                      | Meaning                                                                           |
 | -------------------------- | --------------------------------------------------------------------------------- |
 | Working                    | The last check or delivery worked.                                                |
-| Failing                    | The last check or delivery failed, or the latest requests of agents and bots did. |
+| Failing                    | The last check or delivery failed, or the latest reads of agents and bots failed. |
 | Waiting for first delivery | A webhook source that has not delivered yet.                                      |
 | Needs setup                | A credential is missing, or Connector cannot read it (`ENCRYPTION_KEY` changed).  |
 | Not checked yet            | A live source nobody checked yet.                                                 |

@@ -13,7 +13,7 @@ import type { AppEnv } from "../http/env";
 import { conflict, notFound, validationError } from "../http/errors";
 import { idParam, jsonBody, queryOf, requireAdmin } from "../http/middleware";
 import { audit } from "../core/audit";
-import { escapeLike } from "../admin/service";
+import { escapeLike } from "../db/like";
 import { directoryStatus, syncDirectory } from "../directory/sync";
 
 /** Groups, the directory (SCIM, Keycloak) and the activity log (admins). */

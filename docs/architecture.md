@@ -73,6 +73,8 @@ PostgreSQL holds everything (`apps/server/src/db/schema/`).
   `is_admin`, `blocked_at` and `blocked_by` (`app` or `directory`),
   `sign_in_groups`, `title`, `directory_source` (`scim`, `keycloak`) and
   `directory_id`. The provider's tokens are removed after the sign-in check.
+  Removed people keep their row under a `removed.invalid` address, so the
+  logs still name someone.
 - `groups`, `group_members`: directory groups (`app`, `scim`, `keycloak`)
   with their identity system ID (`external_id`).
 - `sources`: as above; `secret_encrypted` and `oauth_client_encrypted`
@@ -97,9 +99,13 @@ PostgreSQL holds everything (`apps/server/src/db/schema/`).
 `sources/service.ts` decides which sources a principal may use
 (`mayUse`): enabled, and for a person no access groups or one of them
 (`directory/groups.ts`, `inAnyGroup`: subgroups count); for a service token
-`service_access`. Every read goes through `usableSources` or `mayUse`
-before an adapter runs; `fetch` of a closed source answers 404 like an
-unknown item.
+`service_access`. Adapters run only through `sources/use.ts`: `useSources`
+and `useSource` check `mayUse` themselves, so `fetch` of a closed source
+answers 404 like an unknown item; admin pages and the worker use
+`administerSource`, as Connector itself with the source's own credentials,
+never a person's. Every use has a time budget and ends in an outcome (ok,
+count, time, error), whether it worked or not, for the answer and the
+activity log.
 
 Inside a source:
 
@@ -120,10 +126,10 @@ agents.
 
 ## Search
 
-`search/federate.ts` runs every usable source's adapter at the same time,
-each with its own `SOURCE_TIMEOUT_SECONDS` budget, and reports each
-source's outcome (ok, count, time, error). A failing or slow source never
-fails the request.
+`search/federate.ts` asks every usable source at the same time
+(`useSources`), each with its own `SOURCE_TIMEOUT_SECONDS` budget, and
+reports each source's outcome. A failing or slow source never fails the
+request.
 
 - **Merge** (`mergeResults`): round-robin by each source's own rank; within
   a round the stronger authority first, then the source's place in the
@@ -138,7 +144,8 @@ fails the request.
   exact reference (`LB-12`) ranks first; snippets from `ts_headline` with
   `\u0002`/`\u0003` marks (stripped for agents and bots).
 - **Activity**: every read by an agent, token or bot is recorded
-  (`logActivity`); web app reads are not.
+  (`logActivity`); web app reads are not. A failure is kept in Connector's
+  own words (the `SourceError`'s diagnostic), never what the app said.
 
 ## Webhooks
 
@@ -155,14 +162,20 @@ refused one.
 `sources/links.ts` is an OAuth 2.1 client: discovery (RFC 9728, RFC 8414),
 dynamic client registration once per source, authorization code with PKCE
 and `resource`, the `iss` check (RFC 9207), refresh before expiry under a
-row lock (a refresh token works once, and Handbook ends the whole grant on
-reuse), removal of the link when the source refuses the refresh token, and
-revocation on unlink. Proposals (`sources/handbook.ts`,
+row lock and within the request's time budget (a refresh token works once,
+and Handbook ends the whole grant on reuse), removal of the link when the
+source refuses the refresh token, and revocation on unlink. Its requests go
+through `sourceFetch` like every other call to an app. Proposals (`sources/handbook.ts`,
 `proposeHandbookChange`) create a change set, apply the edits or the new
 page, and submit it.
 
 ## Directory
 
+- **People** (`people/lifecycle.ts`): every change to a person's
+  lifecycle, whoever makes it: blocking (`setBlocked`; the directory's
+  through `setDirectoryActive`, which writes the audit log), address
+  changes (`changeEmail`: admin rights from `ADMIN_EMAILS` stay with the
+  address), `ADMIN_EMAILS` at sign-in and removal (`removePerson`).
 - **Sign-in** (`auth/sign-in.ts`): stores the groups of every sign-in
   (claim or Keycloak Admin API) and checks `ACCESS_GROUPS`.
 - **Keycloak sync** (`directory/sync.ts`): all users and groups of the
@@ -203,7 +216,7 @@ Under `/api/v1`, JSON, contracts in `packages/shared/src/api/`:
   `/admin/activity`, `/admin/status`.
 - Admins in the web app only (no tokens or agents): `GET /admin/updates`,
   `POST /admin/updates/check`, `/install`, `/channel`. They ask the
-  updater at `UPDATER_URL` and answer `UpdatesResponse`; a refusal of the
+  updater at `UPDATER_URL` with `UPDATER_TOKEN` and answer `UpdatesResponse`; a refusal of the
   updater comes back as 409 with `error`, an updater's 5xx as that 5xx.
 
 Errors are `{ error: { code, message, fields? } }`. Browser requests that

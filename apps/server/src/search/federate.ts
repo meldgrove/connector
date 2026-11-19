@@ -24,16 +24,9 @@ import { activity } from "../db/schema";
 import type { Principal } from "../auth/principal";
 import { AppError, notFound } from "../http/errors";
 import { logger } from "../logger";
-import { KINDS } from "../sources/registry";
-import { adapterContext, kindOf, mayUse, sourceBySlug, usableSources } from "../sources/service";
-import {
-  SourceError,
-  type Adapter,
-  type AdapterContext,
-  type FetchedItem,
-  type Hit,
-  type SourceRow,
-} from "../sources/types";
+import { kindOf, sourceBySlug } from "../sources/service";
+import type { FetchedItem, Hit, SourceRow } from "../sources/types";
+import { useSource, useSources } from "../sources/use";
 
 /*
  * Federated reads (docs/architecture.md, "Search"): every source the caller
@@ -44,8 +37,6 @@ import {
  * library), so every source's best answers come first and the stronger
  * source wins ties.
  */
-
-type PerSource<T> = { row: SourceRow; value: T };
 
 const sourceRef = (row: SourceRow) => ({ slug: row.slug, name: row.name, kind: kindOf(row) });
 
@@ -79,58 +70,6 @@ function toItem(row: SourceRow, item: FetchedItem): Item {
   };
 }
 
-/** Runs `job` against each source with its own time limit; failures become outcomes. */
-async function eachSource<T>(
-  db: Db,
-  principal: Principal,
-  rows: SourceRow[],
-  job: (adapter: Adapter, context: AdapterContext) => Promise<T[]>,
-): Promise<{ answers: PerSource<T[]>[]; outcomes: SourceOutcome[] }> {
-  const timeoutMs = config().SOURCE_TIMEOUT_SECONDS * 1000;
-  const settled = await Promise.all(
-    rows.map(async (row) => {
-      const started = performance.now();
-      const signal = AbortSignal.timeout(timeoutMs);
-      try {
-        const adapter = KINDS[kindOf(row)].adapter;
-        const value = await Promise.race([
-          job(adapter, adapterContext(db, row, principal, signal)),
-          new Promise<never>((_, reject) =>
-            signal.addEventListener(
-              "abort",
-              () => reject(new SourceError(`${row.name} did not answer in time`)),
-              {
-                once: true,
-              },
-            ),
-          ),
-        ]);
-        return { row, value, error: null, ms: Math.round(performance.now() - started) };
-      } catch (error) {
-        const message =
-          error instanceof SourceError
-            ? error.message
-            : error instanceof Error && error.name === "TimeoutError"
-              ? `${row.name} did not answer in time`
-              : "The source failed";
-        if (!(error instanceof SourceError)) logger.error({ err: error, sourceId: row.id }, "source failed");
-        return { row, value: [] as T[], error: message, ms: Math.round(performance.now() - started) };
-      }
-    }),
-  );
-  return {
-    answers: settled.map(({ row, value }) => ({ row, value })),
-    outcomes: settled.map(({ row, value, error, ms }) => ({
-      slug: row.slug,
-      name: row.name,
-      ok: error === null,
-      count: value.length,
-      ms,
-      error,
-    })),
-  };
-}
-
 /** Round-robin by rank within each source; within a round, the source order decides. */
 export function mergeResults(lists: SearchResult[][], limit: number): SearchResult[] {
   const ranked = lists.flatMap((list, sourceIndex) =>
@@ -149,6 +88,7 @@ export type ActivityInput = {
   action: string;
   query: string | null;
   results: number;
+  /** The outcomes as the log keeps them: Connector's own words (`logged` of source use). */
   sources: SourceOutcome[];
   ms: number;
 };
@@ -157,16 +97,6 @@ export type ActivityInput = {
  * Records what an agent, token or bot asked (oversight). Searches in the
  * web app are not recorded. ACTIVITY_LOG_DAYS=0 records nothing.
  */
-/**
- * What the activity log keeps of a source's failure: Connector's own words,
- * without the text the app or its sign-in server sent (it can echo the
- * request of a linked account), e.g. "Handbook refused the credentials".
- * These are the messages that carry such text (sources/http.ts, links.ts).
- */
-const APP_TEXT =
-  /^(.*?(?:refused the credentials|does not allow this|answered HTTP \d+|The sign-in server refused|refused Connector's registration)): .*$/s;
-export const diagnosticOf = (error: string) => error.replace(APP_TEXT, "$1").slice(0, 300);
-
 export async function logActivity(db: DbOrTx, principal: Principal, entry: ActivityInput) {
   if (config().ACTIVITY_LOG_DAYS === 0) return;
   if (principal.kind === "user" && principal.channel === "web") return;
@@ -185,7 +115,7 @@ export async function logActivity(db: DbOrTx, principal: Principal, entry: Activ
         slug: source.slug,
         ok: source.ok,
         count: source.count,
-        ...(source.error ? { error: diagnosticOf(source.error) } : {}),
+        ...(source.error ? { error: source.error.slice(0, 300) } : {}),
       })),
       ms: entry.ms,
     })
@@ -207,8 +137,7 @@ export async function federatedSearch(
   action = "search",
 ): Promise<SearchResponse> {
   const started = performance.now();
-  const rows = await usableSources(db, principal, query.sources);
-  const { answers, outcomes } = await eachSource(db, principal, rows, (adapter, context) =>
+  const { answers, outcomes, logged } = await useSources(db, principal, query.sources, (adapter, context) =>
     adapter.search(context, query.q, query.limit),
   );
   const results = mergeResults(
@@ -219,7 +148,7 @@ export async function federatedSearch(
     action,
     query: query.q,
     results: results.length,
-    sources: outcomes,
+    sources: logged,
     ms: Math.round(performance.now() - started),
   });
   return { query: query.q, results, sources: outcomes };
@@ -236,40 +165,23 @@ export async function fetchItem(
   const ref = parseItemId(id);
   if (!ref) throw notFound("Use an ID from search results, e.g. handbook:page:…");
   const row = await sourceBySlug(db, ref.source);
-  if (!row || !mayUse(principal, row)) throw notFound("No such item");
-  const signal = AbortSignal.timeout(config().SOURCE_TIMEOUT_SECONDS * 1000);
-  let item: FetchedItem | null;
-  try {
-    item = await KINDS[kindOf(row)].adapter.fetch(
-      adapterContext(db, row, principal, signal),
-      ref.type,
-      ref.externalId,
-    );
-  } catch (error) {
-    if (error instanceof SourceError) {
-      throw new AppError(502, "source_failed", error.message);
-    }
-    throw error;
-  }
+  const use = row
+    ? await useSource(db, principal, row, (adapter, context) =>
+        adapter.fetch(context, ref.type, ref.externalId),
+      )
+    : null;
+  if (!row || !use) throw notFound("No such item");
   if (options.log !== false)
     await logActivity(db, principal, {
       action: "fetch",
       query: id,
-      results: item ? 1 : 0,
-      sources: [
-        {
-          slug: row.slug,
-          name: row.name,
-          ok: true,
-          count: item ? 1 : 0,
-          ms: Math.round(performance.now() - started),
-          error: null,
-        },
-      ],
+      results: use.outcome.count,
+      sources: [use.logged],
       ms: Math.round(performance.now() - started),
     });
-  if (!item) throw notFound("No such item");
-  return toItem(row, item);
+  if (!use.ok) throw new AppError(502, "source_failed", use.error.message);
+  if (!use.value) throw notFound("No such item");
+  return toItem(row, use.value);
 }
 
 const day = (value: string | null) => (value ? value.slice(0, 10) : "unknown date");
@@ -285,18 +197,22 @@ export async function buildContext(
   request: ContextRequest,
 ): Promise<ContextResponse> {
   const started = performance.now();
-  const rows = await usableSources(db, principal, request.sources);
-  const { answers, outcomes } = await eachSource(db, principal, rows, async (adapter, context) => {
-    const hits = await adapter.search(context, request.topic, request.perSource);
-    // Live results without a date (Handbook pages): read their date, for the hints.
-    return Promise.all(
-      hits.map(async (hit) => {
-        if (hit.date || hit.authority !== "knowledge") return hit;
-        const item = await adapter.fetch(context, hit.type, hit.externalId).catch(() => null);
-        return item ? { ...hit, date: item.date } : hit;
-      }),
-    );
-  });
+  const { answers, outcomes, logged } = await useSources(
+    db,
+    principal,
+    request.sources,
+    async (adapter, context) => {
+      const hits = await adapter.search(context, request.topic, request.perSource);
+      // Live results without a date (Handbook pages): read their date, for the hints.
+      return Promise.all(
+        hits.map(async (hit) => {
+          if (hit.date || hit.authority !== "knowledge") return hit;
+          const item = await adapter.fetch(context, hit.type, hit.externalId).catch(() => null);
+          return item ? { ...hit, date: item.date } : hit;
+        }),
+      );
+    },
+  );
   const all = answers.flatMap(({ row, value }) => value.map((hit) => toResult(row, hit)));
   const sections = AUTHORITIES.map((authority) => ({
     authority,
@@ -333,7 +249,7 @@ export async function buildContext(
     action: "context",
     query: request.topic,
     results: all.length,
-    sources: outcomes,
+    sources: logged,
     ms: Math.round(performance.now() - started),
   });
   return { topic: request.topic, sections, notes: notes.slice(0, 20), sources: outcomes };
@@ -346,8 +262,7 @@ export async function recentChanges(
 ): Promise<RecentResponse> {
   const started = performance.now();
   const since = new Date(Date.now() - query.days * 86_400_000);
-  const rows = await usableSources(db, principal, query.sources);
-  const { answers, outcomes } = await eachSource(db, principal, rows, (adapter, context) =>
+  const { answers, outcomes, logged } = await useSources(db, principal, query.sources, (adapter, context) =>
     adapter.recent(context, since, query.limit),
   );
   const results = answers
@@ -358,7 +273,7 @@ export async function recentChanges(
     action: "recent",
     query: `${query.days} days`,
     results: results.length,
-    sources: outcomes,
+    sources: logged,
     ms: Math.round(performance.now() - started),
   });
   return { items: results, sources: outcomes };

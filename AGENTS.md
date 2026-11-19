@@ -32,13 +32,14 @@ apps/server/src/
   config.ts        every environment variable (zod); read only via config()
   db/schema/       Drizzle schema (auth.ts, app.ts)
   auth/            Better Auth, sign-in check and groups, credentials (tokens), principals
-  sources/         sources (service.ts), one adapter per kind, the index, webhooks, linked accounts
+  sources/         sources (service.ts), source use (use.ts), one adapter per kind, the index, webhooks, linked accounts
   search/          federation: search, fetch, context, recent, activity log
   directory/       groups, Keycloak directory sync, people directory
   scim/            SCIM 2.0 server
   oauth/           OAuth 2.1 server for connected apps (MCP clients)
   mcp/             MCP server and tools (call the REST API in-process)
-  admin/           people: update, block, remove
+  admin/           people as admins see and change them: list, update
+  people/          a person's lifecycle on every path: block, address, removal
   http/            app factory, middleware, errors
   modules/         one file per API area: routes
   worker/          scheduled jobs
@@ -52,10 +53,11 @@ packages/shared/src/  contracts, source kinds and order, limits
   `packages/shared/src/api/` and use it on both sides; routes validate input
   with it (`jsonBody`, `queryOf`).
 - **Access before content.** Every route starts with `requirePrincipal`,
-  `requireUser`, `requireWebUser` or `requireAdmin`. Every read of a source
-  goes through `usableSources` or `mayUse` (`sources/service.ts`) before an
-  adapter runs; adapters apply the app's own rules (Library team notes,
-  Handbook drafts). Agents act as their person and never administer;
+  `requireUser`, `requireWebUser` or `requireAdmin`. Adapters run only
+  through `sources/use.ts`: `useSource` and `useSources` check `mayUse`
+  before an adapter runs, and admin pages and the worker use
+  `administerSource` (Connector's own credentials, never a person's);
+  adapters apply the app's own rules (Library team notes, Handbook drafts). Agents act as their person and never administer;
   service tokens read only sources opened to them and only items meant for
   everyone.
 - **Every kind of information keeps its home.** Live sources are asked at
@@ -63,9 +65,11 @@ packages/shared/src/  contracts, source kinds and order, limits
   on every delivery and deleted on removal. Never copy live sources into
   the database.
 - **Adapters** implement `Adapter` (`sources/types.ts`), throw
-  `SourceError` with short plain messages, and never let a source's failure
-  fail a federated request. Calls to apps go through `sourceRequest`
-  (`sources/http.ts`): timeouts, no redirects, size limits.
+  `SourceError` with short plain messages and a kind (callers branch on the
+  kind, never on a status or a message; what the app said stays out of the
+  diagnostic), and never let a source's failure fail a federated request.
+  Calls to apps go through `sourceRequest` or `sourceFetch`
+  (`sources/http.ts`): the caller's signal, no redirects, size limits.
 - **Every result links to its source** (absolute URL) and carries its
   authority (source order).
 - **Credentials** of Connector are stored as SHA-256 hashes; secrets are

@@ -1,12 +1,11 @@
-import { and, asc, count, eq, ilike, inArray, notLike, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, eq, ilike, inArray, sql, type SQL } from "drizzle-orm";
 import { config } from "../config";
 import type { Db, DbOrTx } from "../db/client";
+import { escapeLike } from "../db/like";
 import { groupMembers, groups, users } from "../db/schema";
-import { setDirectoryActive } from "../admin/service";
-import { REMOVED_EMAIL_DOMAIN, isRemoved, removePerson } from "../admin/remove";
-import { isEnvironmentAdmin } from "../auth/bootstrap";
 import { audit } from "../core/audit";
-import { escapeLike } from "../admin/service";
+import { AppError } from "../http/errors";
+import { changeEmail, isRemoved, notRemoved, removePerson, setDirectoryActive } from "../people/lifecycle";
 import { ScimFilterError, normalizeAttribute, parseFilter, type ScimCondition } from "./filter";
 
 /*
@@ -125,8 +124,6 @@ function conditions(filter: string | undefined, map: (condition: ScimCondition) 
     return clause;
   });
 }
-
-const notRemoved = notLike(users.email, `%@${REMOVED_EMAIL_DOMAIN}`);
 
 export async function listUsers(
   db: DbOrTx,
@@ -273,7 +270,7 @@ async function saveUser(db: Db, user: UserRow, input: UserInput) {
         throw new ScimError(400, "userName must be an email address", "invalidValue");
       const [taken] = await tx.select({ id: users.id }).from(users).where(eq(users.email, input.email));
       if (taken) throw new ScimError(409, "Another user has this email address", "uniqueness");
-      set.email = input.email;
+      await changeEmail(tx, user, input.email);
     }
     if (input.name !== undefined) set.name = input.name;
     if (input.title !== undefined) set.title = input.title;
@@ -390,11 +387,12 @@ export async function patchUser(db: Db, id: string, body: Json): Promise<UserRow
 
 export async function deleteUser(db: Db, id: string): Promise<void> {
   const user = await getUser(db, id);
-  if (user.adminSource === "environment" || isEnvironmentAdmin(user.email)) {
-    await setDirectoryActive(db, user.id, false);
-    return;
-  }
-  await removePerson(db, null, user.id);
+  // removePerson decides under the row lock; an admin from ADMIN_EMAILS stays.
+  await removePerson(db, null, user.id).catch((error: unknown) => {
+    if (error instanceof AppError && error.code === "environment_admin")
+      throw new ScimError(409, error.message);
+    throw error;
+  });
 }
 
 /** Members given as `[{ value: <user id> }]`; unknown IDs are an error. */

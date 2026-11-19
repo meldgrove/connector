@@ -250,6 +250,64 @@ describe("admin status", () => {
     expect(JSON.stringify(body)).not.toContain("a-long-enough-webhook-secret");
   });
 
+  it("notices a source that fails an agent's fetch", async () => {
+    const admin = await createUser({ isAdmin: true });
+    const rita = await createUser({ name: "Rita" });
+    await createSource({
+      kind: "handbook",
+      config: { baseUrl: handbook.url, ruleSpaces: [], allowLinking: false },
+      secret: { serviceToken: "hb_wrong" },
+    });
+    const id = encodeURIComponent("handbook:page:0b7c1f2e-8a4d-4c3b-9e5f-1a2b3c4d5e6f");
+    const fetched = await request("GET", `/api/v1/items/${id}`, { token: await createToken(rita.id) });
+    expect(fetched.status).toBe(502);
+    const [logged] = await getDb().select().from(activity);
+    expect(logged).toMatchObject({
+      action: "fetch",
+      results: 0,
+      sources: [{ slug: "handbook", ok: false, count: 0, error: "Handbook refused the credentials" }],
+    });
+    expect((await status(admin.id)).sources[0]).toMatchObject({
+      state: "failing",
+      requests: { total: 1, failed: 1, lastError: { message: "Handbook refused the credentials" } },
+    });
+  });
+
+  it("logs a failed proposal without counting it against the source", async () => {
+    const admin = await createUser({ isAdmin: true });
+    const rita = await createUser({ name: "Rita" });
+    await createSource({
+      kind: "handbook",
+      config: { baseUrl: handbook.url, ruleSpaces: [], allowLinking: false },
+      secret: { serviceToken: "hb_right" },
+    });
+    // Rita has no linked account: the proposal fails before Handbook is asked.
+    const proposal = {
+      title: "New page",
+      description: "The VPN has no page yet",
+      newPage: { space: "it", path: "vpn", title: "VPN", body: "How to connect" },
+    };
+    const proposed = await request("POST", "/api/v1/proposals", {
+      token: await createToken(rita.id),
+      body: proposal,
+    });
+    expect(proposed.status).toBe(409);
+    const [logged] = await getDb().select().from(activity);
+    expect(logged).toMatchObject({
+      action: "propose",
+      results: 0,
+      sources: [
+        {
+          slug: "handbook",
+          ok: false,
+          error:
+            "Link your Handbook account first: open Connector, Settings → Linked accounts (the agent proposes as you)",
+        },
+      ],
+    });
+    expect((await status(admin.id)).sources[0]).toMatchObject({ state: "unchecked", requests: { total: 0 } });
+  });
+
   it("notices sources that fail agents' requests, until a request works again", async () => {
     const admin = await createUser({ isAdmin: true });
     const rita = await createUser({ name: "Rita" });

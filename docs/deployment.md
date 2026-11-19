@@ -72,10 +72,10 @@ process.
 5. **Environment variables** of the resource: `CONNECTOR_VERSION` (a series
    such as `0.1`, see [Automatic updates](#automatic-updates)), `APP_URL`
    (the domain), `DATABASE_URL` (the database's internal URL), a new
-   `AUTH_SECRET` and a new `ENCRYPTION_KEY` (each `openssl rand -base64
-32`), the `OIDC_*` values, your address in `ADMIN_EMAILS`, `DIRECTORY`
-   (`keycloak` with a Keycloak service account), and `SEARCH_LANGUAGES` for
-   the languages of your Logbook and Library.
+   `AUTH_SECRET`, `ENCRYPTION_KEY` and `UPDATER_TOKEN` (each
+   `openssl rand -base64 32`), the `OIDC_*` values, your address in
+   `ADMIN_EMAILS`, `DIRECTORY` (`keycloak` with a Keycloak service account),
+   and `SEARCH_LANGUAGES` for the languages of your Logbook and Library.
 6. **Deploy**, open `APP_URL`, sign in, and connect the first source with
    its guide under **Administration → Status** ([Sources](sources.md)).
 7. **Automatic updates:** set them up [on Coolify](#on-coolify).
@@ -100,9 +100,9 @@ run the commands as root (`sudo -i`).
    `<APP_URL>/api/auth/callback/oidc` ([Identity and access](identity-and-access.md)).
 4. **Create `.env`** from `.env.example` (`cp .env.example .env`,
    `chmod 600 .env`) and set production values: `CONNECTOR_VERSION` (a
-   series such as `0.1`), `APP_URL`, `DATABASE_URL`, a new `AUTH_SECRET`
-   and a new `ENCRYPTION_KEY` (each `openssl rand -base64 32`), the `OIDC_*`
-   values, your address in `ADMIN_EMAILS`, `DIRECTORY`, and
+   series such as `0.1`), `APP_URL`, `DATABASE_URL`, a new `AUTH_SECRET`,
+   `ENCRYPTION_KEY` and `UPDATER_TOKEN` (each `openssl rand -base64 32`),
+   the `OIDC_*` values, your address in `ADMIN_EMAILS`, `DIRECTORY`, and
    `SEARCH_LANGUAGES` for the languages of your Logbook and Library. Remove
    `NODE_ENV=development`, `RUN_MIGRATIONS` and
    `OAUTH_ALLOW_PRIVATE_CLIENT_URLS`. With an `https` `APP_URL`, the app
@@ -195,7 +195,9 @@ Admins choose the channel under **Administration → Updates**. The app
 reaches the updater at `UPDATER_URL` (`http://updater:8080` in
 `compose.yaml`). On the server, `docker compose exec updater updater status`
 shows the same, and `docker compose logs updater` says what the updater
-did. Never publish the updater's port: its API has no authentication.
+did. With `UPDATER_TOKEN` set, the app sends it and the updater refuses
+requests without it; without it, anything that reaches the updater on the
+Docker network could install updates. Never publish the updater's port.
 
 Set up [backups](#backups) first: migrations run without anyone watching.
 
