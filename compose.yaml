@@ -97,7 +97,7 @@ services:
   # image, it calls that deploy link or leaves a request in the volume, and
   # Coolify or the server deploys the new release.
   updater:
-    image: ghcr.io/meldgrove/updater:0.1
+    image: ghcr.io/meldgrove/updater:0.2
     pull_policy: ${PULL_POLICY:-missing}
     restart: unless-stopped
     environment:
