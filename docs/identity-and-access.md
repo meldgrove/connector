@@ -15,7 +15,9 @@ groups and tokens.
 | SCIM token                              | Identity systems such as Meldgrove IAM: people and groups at `/scim/v2`, nothing else.                                                                                                                |
 
 Admins come from `ADMIN_EMAILS` (always admins, also the way back in) or are
-made admins by another admin under **Administration → People**. There,
+made admins by another admin under **Administration → People**. Admin rights
+from `ADMIN_EMAILS` belong to the address: when the provider or the directory
+changes it to one not in the list, they end. There,
 admins can also block someone: blocked people cannot sign in, their sessions
 end, and their personal tokens and connected apps are revoked for good
 (unblocking does not bring them back).
@@ -46,7 +48,9 @@ groups under **Settings**.
 ## Directory
 
 The directory lists colleagues for `find_people` and the **People** page,
-and keeps groups and deactivations current between sign-ins.
+and keeps groups and deactivations current between sign-ins. It never
+blocks people in `ADMIN_EMAILS`, and the audit log records whom it blocks
+and unblocks.
 
 ### Keycloak (`DIRECTORY=keycloak`)
 
@@ -89,6 +93,8 @@ would: if the provider still lets them sign in, they come back as a new
 person. So let the identity system deactivate people (`active: false`)
 rather than delete them; Meldgrove IAM's _Deactivate the user_ does that. `active: false` blocks the person, ends their
 sessions and revokes their agents; `true` lifts only the directory's block.
+Deleting a person in `ADMIN_EMAILS` is refused (409). A new `userName`
+keeps admin rights from `ADMIN_EMAILS` only if it is in `ADMIN_EMAILS` too.
 Groups from Keycloak cannot be changed through SCIM.
 
 **Meldgrove IAM:** the guide **Connect Meldgrove IAM** (**Administration →

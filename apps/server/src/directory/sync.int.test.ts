@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { resetConfigForTests } from "../config";
-import { credentials, groups, users } from "../db/schema";
+import { auditLog, credentials, groups, users } from "../db/schema";
 import { createGroup, createToken, createUser, request, resetDatabase } from "../test/helpers";
 import type { KeycloakClient, KeycloakUser } from "./keycloak";
 import { ensureEnvironmentAdmins } from "../auth/bootstrap";
@@ -78,6 +78,15 @@ describe("Keycloak directory sync", () => {
     expect((await request("GET", "/api/v1/me", { token: agent })).status).toBe(401);
     const [revoked] = await getDb().select().from(credentials).where(eq(credentials.userId, ada.id));
     expect(revoked!.revokedAt).not.toBeNull();
+    const directoryEntries = () =>
+      getDb()
+        .select({ actorUserId: auditLog.actorUserId, action: auditLog.action, summary: auditLog.summary })
+        .from(auditLog)
+        .where(eq(auditLog.entityId, ada.id))
+        .orderBy(asc(auditLog.createdAt), asc(auditLog.id));
+    expect(await directoryEntries()).toEqual([
+      { actorUserId: null, action: "person.blocked", summary: "The directory blocked ada@example.org" },
+    ]);
     expect((await getDb().select().from(groups)).map((group) => group.name).sort()).toEqual([
       "/staff/it",
       "Finance",
@@ -91,6 +100,10 @@ describe("Keycloak directory sync", () => {
     await syncDirectory(realm(people, {}));
     const [back] = await getDb().select().from(users).where(eq(users.id, ada.id));
     expect(back!.blockedAt).toBeNull();
+    expect((await directoryEntries()).map((entry) => entry.summary)).toEqual([
+      "The directory blocked ada@example.org",
+      "The directory unblocked ada@example.org",
+    ]);
     // Deleted in Keycloak: blocked.
     await syncDirectory(realm([people[0]!], {}));
     const [gone] = await getDb().select().from(users).where(eq(users.id, rita.id));

@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { asc, eq } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { credentials, sessions, users } from "../db/schema";
+import { resetConfigForTests } from "../config";
+import { auditLog, credentials, sessions, users } from "../db/schema";
 import {
   createAdminToken,
   createGroup,
@@ -144,6 +145,142 @@ describe("SCIM 2.0", () => {
     expect((await request("GET", `/scim/v2/Users/${id}`, { token })).status).toBe(404);
     const [removed] = await getDb().select().from(users).where(eq(users.id, id));
     expect(removed!.email).toBe(`removed-${id}@removed.invalid`);
+  });
+
+  it("records in the audit log whom the directory blocks and unblocks", async () => {
+    const token = await createAdminToken("scim", "IAM");
+    const created = await request("POST", "/scim/v2/Users", {
+      token,
+      body: { userName: "olga@example.org", displayName: "Olga" },
+    });
+    const id = created.body.id as string;
+    const setActive = (value: boolean) =>
+      request("PATCH", `/scim/v2/Users/${id}`, {
+        token,
+        body: { Operations: [{ op: "replace", path: "active", value }] },
+      });
+    await setActive(false);
+    // Saying it again changes nothing and records nothing.
+    await setActive(false);
+    await setActive(true);
+    const entries = await getDb()
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.entityId, id))
+      .orderBy(asc(auditLog.createdAt), asc(auditLog.id));
+    expect(
+      entries.map(({ actorUserId, action, entityType, summary }) => ({
+        actorUserId,
+        action,
+        entityType,
+        summary,
+      })),
+    ).toEqual([
+      {
+        actorUserId: null,
+        action: "scim.user_created",
+        entityType: "user",
+        summary: "The directory (SCIM) added a person",
+      },
+      {
+        actorUserId: null,
+        action: "person.blocked",
+        entityType: "user",
+        summary: "The directory blocked olga@example.org",
+      },
+      {
+        actorUserId: null,
+        action: "person.unblocked",
+        entityType: "user",
+        summary: "The directory unblocked olga@example.org",
+      },
+    ]);
+
+    // Renamed, then removed: the log keeps neither address.
+    await request("PATCH", `/scim/v2/Users/${id}`, {
+      token,
+      body: { Operations: [{ op: "replace", path: "userName", value: "olga.new@example.org" }] },
+    });
+    expect((await request("DELETE", `/scim/v2/Users/${id}`, { token })).status).toBe(204);
+    const summaries = (await getDb().select().from(auditLog)).map((entry) => entry.summary).join("\n");
+    expect(summaries).not.toContain("olga");
+    expect(summaries).toContain("The directory blocked a removed person");
+  });
+
+  it("keeps admin rights from ADMIN_EMAILS only while the new address is in ADMIN_EMAILS", async () => {
+    const previousAdmins = process.env.ADMIN_EMAILS;
+    process.env.ADMIN_EMAILS = "root@example.org,boss@example.org";
+    resetConfigForTests();
+    onTestFinished(() => {
+      process.env.ADMIN_EMAILS = previousAdmins;
+      resetConfigForTests();
+    });
+    const token = await createAdminToken("scim", "IAM");
+    const root = await createUser({ email: "root@example.org", isAdmin: true });
+    await getDb().update(users).set({ adminSource: "environment" }).where(eq(users.id, root.id));
+    const person = async () => (await getDb().select().from(users).where(eq(users.id, root.id)))[0];
+
+    const replaced = await request("PUT", `/scim/v2/Users/${root.id}`, {
+      token,
+      body: { userName: "boss@example.org", displayName: "Root" },
+    });
+    expect(replaced.status).toBe(200);
+    expect(await person()).toMatchObject({
+      email: "boss@example.org",
+      isAdmin: true,
+      adminSource: "environment",
+    });
+
+    const patched = await request("PATCH", `/scim/v2/Users/${root.id}`, {
+      token,
+      body: { Operations: [{ op: "replace", path: "userName", value: "former.root@example.org" }] },
+    });
+    expect(patched.status).toBe(200);
+    expect(await person()).toMatchObject({
+      email: "former.root@example.org",
+      isAdmin: false,
+      adminSource: null,
+    });
+  });
+
+  it("does not remove or block an admin from ADMIN_EMAILS", async () => {
+    const token = await createAdminToken("scim", "IAM");
+    // In ADMIN_EMAILS, but not yet made admin by a start.
+    const root = await createUser({ email: "root@example.org" });
+    const person = async () => (await getDb().select().from(users).where(eq(users.id, root.id)))[0];
+    const refused = {
+      schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
+      status: "409",
+      detail: "This person is an admin through ADMIN_EMAILS; change it there",
+    };
+
+    const byAddress = await request("DELETE", `/scim/v2/Users/${root.id}`, { token });
+    expect(byAddress.status).toBe(409);
+    expect(byAddress.body).toEqual(refused);
+    expect(await person()).toMatchObject({ email: "root@example.org", blockedAt: null });
+
+    // Made admin by the last start under an address ADMIN_EMAILS no longer lists.
+    await getDb()
+      .update(users)
+      .set({ email: "former.root@example.org", isAdmin: true, adminSource: "environment" })
+      .where(eq(users.id, root.id));
+    const byStart = await request("DELETE", `/scim/v2/Users/${root.id}`, { token });
+    expect(byStart.status).toBe(409);
+    expect(byStart.body).toEqual(refused);
+    const deactivated = await request("PATCH", `/scim/v2/Users/${root.id}`, {
+      token,
+      body: {
+        schemas: ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        Operations: [{ op: "replace", path: "active", value: false }],
+      },
+    });
+    expect(deactivated.status).toBe(200);
+    expect(await person()).toMatchObject({
+      email: "former.root@example.org",
+      isAdmin: true,
+      adminSource: "environment",
+      blockedAt: null,
+    });
   });
 
   it("fills groups that decide who may use which source", async () => {

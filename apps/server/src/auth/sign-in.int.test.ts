@@ -8,7 +8,8 @@ import { createUser, resetDatabase, testApp } from "../test/helpers";
 import { resetAuthForTests } from "./auth";
 import { ensureEnvironmentAdmins } from "./bootstrap";
 import { resolveSession } from "./resolve";
-import { checkAccessAtSignIn } from "./sign-in";
+import type { KeycloakClient } from "../directory/keycloak";
+import { checkAccessAtSignIn, setSignInKeycloakClientForTests } from "./sign-in";
 
 const APP = "http://localhost:3000";
 const ISSUER = process.env.OIDC_ISSUER!.replace(/\/+$/, "");
@@ -111,7 +112,7 @@ function setEnv(values: Record<string, string>) {
   resetAuthForTests();
 }
 
-const ENV_KEYS = ["OIDC_REQUIRE_EMAIL_VERIFIED", "ALLOWED_EMAIL_DOMAINS", "ACCESS_GROUPS"];
+const ENV_KEYS = ["OIDC_REQUIRE_EMAIL_VERIFIED", "ALLOWED_EMAIL_DOMAINS", "ACCESS_GROUPS", "DIRECTORY"];
 
 beforeAll(() => {
   vi.stubGlobal("fetch", fakeFetch);
@@ -170,6 +171,24 @@ describe("sign-in through the provider", () => {
       "email_not_verified",
     );
     expect(await getDb().select().from(sessions)).toHaveLength(1);
+  });
+
+  it("keeps admin rights from ADMIN_EMAILS with the address, when the provider changes it", async () => {
+    await ensureEnvironmentAdmins(getDb());
+    const [root] = await getDb().select().from(users).where(eq(users.email, "root@example.org"));
+    await signIn({ sub: "root", email: "root@example.org", email_verified: true, name: "Root" });
+    expect((await getDb().select().from(users).where(eq(users.id, root!.id)))[0]).toMatchObject({
+      isAdmin: true,
+      adminSource: "environment",
+    });
+    // The provider now says another address: the person signs in, as someone who is not in ADMIN_EMAILS.
+    const moved = await signIn({ sub: "root", email: "former.root@example.org", email_verified: true });
+    expect(moved).toMatchObject({ path: "/", error: null });
+    expect((await getDb().select().from(users).where(eq(users.id, root!.id)))[0]).toMatchObject({
+      email: "former.root@example.org",
+      isAdmin: false,
+      adminSource: null,
+    });
   });
 
   it("trusts the provider's addresses when OIDC_REQUIRE_EMAIL_VERIFIED is off", async () => {
@@ -282,6 +301,33 @@ describe("checkAccessAtSignIn", () => {
     expect(await checkAccessAtSignIn(root.id)).toBe(true);
     const [after] = await getDb().select().from(users).where(eq(users.id, root.id));
     expect(after).toMatchObject({ isAdmin: true, adminSource: "environment", blockedAt: null });
+  });
+
+  it("decides admin rights from ADMIN_EMAILS by the address the person has at that moment", async () => {
+    setEnv({ DIRECTORY: "keycloak" });
+    const root = await withAccount("root@example.org", { sub: "root" });
+    await getDb()
+      .update(users)
+      .set({ isAdmin: true, adminSource: "environment" })
+      .where(eq(users.id, root.id));
+    // While the sign-in reads the groups, the directory gives the person an address ADMIN_EMAILS does not list.
+    const client: Pick<KeycloakClient, "userGroups"> = {
+      userGroups: async () => {
+        await getDb()
+          .update(users)
+          .set({ email: "former.root@example.org", isAdmin: false, adminSource: null })
+          .where(eq(users.id, root.id));
+        return [];
+      },
+    };
+    setSignInKeycloakClientForTests(client as KeycloakClient);
+    try {
+      await checkAccessAtSignIn(root.id);
+    } finally {
+      setSignInKeycloakClientForTests(undefined);
+    }
+    const [after] = await getDb().select().from(users).where(eq(users.id, root.id));
+    expect(after).toMatchObject({ email: "former.root@example.org", isAdmin: false, adminSource: null });
   });
 
   it("reads ACCESS_GROUPS from the ID token, else from the userinfo answer about the same person", async () => {

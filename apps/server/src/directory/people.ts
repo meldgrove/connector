@@ -1,9 +1,9 @@
-import { and, asc, eq, ilike, isNull, notLike, or, sql } from "drizzle-orm";
+import { and, asc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import type { Colleague } from "@connector/shared/api/users";
 import type { Db } from "../db/client";
 import { groupMembers, groups, users } from "../db/schema";
-import { REMOVED_EMAIL_DOMAIN } from "../admin/remove";
-import { escapeLike } from "../admin/service";
+import { escapeLike } from "../db/like";
+import { notRemoved } from "../people/lifecycle";
 
 /**
  * The people directory for people and agents: colleagues by name, email
@@ -24,7 +24,7 @@ export async function findColleagues(db: Db, q: string, limit: number): Promise<
     .where(
       and(
         isNull(users.blockedAt),
-        notLike(users.email, `%@${REMOVED_EMAIL_DOMAIN}`),
+        notRemoved,
         or(
           ilike(users.name, pattern),
           ilike(users.email, pattern),

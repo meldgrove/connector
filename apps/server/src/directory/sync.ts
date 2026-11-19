@@ -6,9 +6,8 @@ import { getDb, type DbOrTx } from "../db/client";
 import { accounts, groupMembers, groups, settings, users } from "../db/schema";
 import { putSetting } from "../core/settings";
 import { logger } from "../logger";
-import { setDirectoryActive } from "../admin/service";
-import { REMOVED_EMAIL_DOMAIN } from "../admin/remove";
 import { isEnvironmentAdmin } from "../auth/bootstrap";
+import { changeEmail, notRemoved, setDirectoryActive } from "../people/lifecycle";
 import { inAnyGroup } from "./groups";
 import { createKeycloakClient, displayNameOf, type KeycloakClient, type KeycloakUser } from "./keycloak";
 
@@ -142,15 +141,10 @@ export async function syncDirectory(
               existing.email === email
                 ? []
                 : await tx.select({ id: users.id }).from(users).where(eq(users.email, email));
-            const moves = !taken && existing.email !== email;
             // Another person has the new address: this person keeps neither address,
             // so an address from ADMIN_EMAILS cannot make them admin again.
             const conflict = Boolean(taken) && existing.email !== email;
-            const written = conflict
-              ? `conflict-${id}@${CONFLICT_EMAIL_DOMAIN}`
-              : moves
-                ? email
-                : existing.email;
+            const written = conflict ? `conflict-${id}@${CONFLICT_EMAIL_DOMAIN}` : email;
             if (conflict)
               logger.warn({ userId: id }, "a Keycloak user's new email address belongs to another person");
             await tx
@@ -160,14 +154,9 @@ export async function syncDirectory(
                 directorySource: "keycloak",
                 directoryId: user.id,
                 updatedAt: sql`now()`,
-                ...(moves ? { email } : {}),
-                ...(conflict ? { email: written } : {}),
-                // Admin through ADMIN_EMAILS belongs to the address the person keeps.
-                ...(existing.adminSource === "environment" && !isEnvironmentAdmin(written)
-                  ? { isAdmin: false, adminSource: null }
-                  : {}),
               })
               .where(eq(users.id, id));
+            if (written !== existing.email) await changeEmail(tx, existing, written);
           }
         } else {
           const [created] = await tx
@@ -197,7 +186,7 @@ export async function syncDirectory(
           and(
             eq(users.directorySource, "keycloak"),
             isNotNull(users.directoryId),
-            sql`${users.email} not like ${`%@${REMOVED_EMAIL_DOMAIN}`}`,
+            notRemoved,
             realmUsers.length > 0
               ? notInArray(
                   users.directoryId,

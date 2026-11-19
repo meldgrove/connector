@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, isNull, like, not, or, gt, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNull, like, or, gt, sql } from "drizzle-orm";
 import type { AdminStatus, Problem, SourceHealth, SourceState } from "@connector/shared/api/status";
 import { SOURCE_KIND_INFO } from "@connector/shared/sources";
 import { config } from "../config";
@@ -14,7 +14,7 @@ import {
   users,
 } from "../db/schema";
 import { getSetting } from "../core/settings";
-import { REMOVED_EMAIL_DOMAIN } from "../admin/remove";
+import { notRemoved } from "../people/lifecycle";
 import { CONFLICT_EMAIL_DOMAIN, directoryStatus } from "../directory/sync";
 import { SCIM_LAST_ERROR, SCIM_LAST_REQUEST } from "../scim/routes";
 import {
@@ -273,10 +273,7 @@ export async function adminStatus(db: Db): Promise<AdminStatus> {
       });
     }
   }
-  const [people] = await db
-    .select({ value: count() })
-    .from(users)
-    .where(not(like(users.email, `%@${REMOVED_EMAIL_DOMAIN}`)));
+  const [people] = await db.select({ value: count() }).from(users).where(notRemoved);
   const [groupCount] = await db.select({ value: count() }).from(groups);
   const [conflicts] = await db
     .select({ value: count() })
