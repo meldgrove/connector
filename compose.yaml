@@ -101,9 +101,11 @@ services:
   # (Debian: `updater host-setup`; admins choose Stable or Preview in the
   # app, and the server writes each version it installs into
   # CONNECTOR_VERSION). Only the app reaches its API: never publish a port.
-  # With UPDATER_TOKEN, the API takes only requests that carry it.
+  # With UPDATER_TOKEN, the API takes only requests that carry it. An exact
+  # version (Dependabot raises it): `docker compose up` pulls a new one,
+  # where a cached series tag could keep a version without the token.
   updater:
-    image: ghcr.io/meldgrove/updater:0.2
+    image: ghcr.io/meldgrove/updater:0.2.1
     pull_policy: ${PULL_POLICY:-missing}
     restart: unless-stopped
     environment:
