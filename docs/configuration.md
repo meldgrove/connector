@@ -85,10 +85,11 @@ request seems to come from the proxy.
 
 ## Docker Compose only
 
-| Variable                                                                                       | Meaning                                                                           |
-| ---------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `CONNECTOR_VERSION`                                                                            | The image tag to run, e.g. `0.1.0`, or a series like `0.1`.                       |
-| `CONNECTOR_PORT`                                                                               | Host port of `web` (default 3000).                                                |
-| `PULL_POLICY`                                                                                  | `always` makes every start pull the image (platforms that do not pull on deploy). |
-| `POSTGRES_PASSWORD`                                                                            | With `compose.postgres.yaml`.                                                     |
-| `UPDATE_DEPLOY_HOOK_URL`, `UPDATE_DEPLOY_HOOK_TOKEN`, `UPDATE_COOLDOWN`, `UPDATE_WINDOW`, `TZ` | The optional updater ([Deployment](deployment.md#automatic-updates)).             |
+| Variable                                                                                       | Meaning                                                                                                                  |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `CONNECTOR_VERSION`                                                                            | The image tag to run, e.g. `0.1.0`, or a series like `0.1`. On Debian, the updater writes each version it installs here. |
+| `CONNECTOR_PORT`                                                                               | Host port of `web` (default 3000).                                                                                       |
+| `PULL_POLICY`                                                                                  | `always` makes every start pull the image (platforms that do not pull on deploy).                                        |
+| `POSTGRES_PASSWORD`                                                                            | With `compose.postgres.yaml`.                                                                                            |
+| `UPDATE_DEPLOY_HOOK_URL`, `UPDATE_DEPLOY_HOOK_TOKEN`, `UPDATE_COOLDOWN`, `UPDATE_WINDOW`, `TZ` | The optional updater ([Deployment](deployment.md#automatic-updates)).                                                    |
+| `UPDATE_REGISTRY_USERNAME`, `UPDATE_REGISTRY_PASSWORD`                                         | Only while the image is private: a GitHub user and a token with `read:packages`, for the updater.                        |

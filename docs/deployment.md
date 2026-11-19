@@ -155,23 +155,46 @@ hears when the app is down.
      which is at the newest release.
    - **Debian:** in `/srv/connector`, run `git pull` (the newest release's
      `compose.yaml`), change `CONNECTOR_VERSION` in `.env`, and run
-     `docker compose up -d --pull always`.
+     `docker compose up -d --pull always`. With
+     [automatic updates](#on-debian), run `git pull`, then
+     `docker compose exec updater updater install <version>` instead: it
+     goes back to the version before if the new one does not become
+     healthy.
 
 The `migrate` service applies database migrations before `web` and `worker`
 start.
 
 ## Automatic updates
 
-The `updater` service installs new releases of the tag in
-`CONNECTOR_VERSION`: with a series such as `0.1`, every release that
-installs without steps; with `latest`, every release, also those with
-upgrade steps. A release installs once the updater has seen it for three
-days (`UPDATE_COOLDOWN`: `0` installs within the hour, `7d` waits a week), and
-with `UPDATE_WINDOW` (such as `02:00-05:00`, in the time zone `TZ`) only
-then. Set up [backups](#backups) first: migrations run without anyone
-watching. Details: [meldgrove/updater](https://github.com/meldgrove/updater).
+The `updater` service ([meldgrove/updater](https://github.com/meldgrove/updater))
+keeps Connector current. On Debian, it follows one of two channels:
+
+- **Stable** (default): releases. A release in the running series installs
+  automatically once it has been out for three days (`UPDATE_COOLDOWN`: `0`
+  installs within the hour, `7d` waits a week). A release with upgrade steps
+  starts a new series: the updater reports it, but never installs it on its
+  own.
+- **Preview**: meant for previews of unreleased changes, which Connector
+  does not publish yet. Until then it installs every release within the
+  hour, also those with upgrade steps.
+
+With `UPDATE_WINDOW` (such as `02:00-05:00`, in the time zone `TZ`),
+automatic installs happen only then. Switching from Preview back to Stable
+installs nothing and never goes back to an older version.
+
+Connector has no update button in the app yet. On the server,
+`docker compose exec updater updater status` shows the installed version,
+the channel and the available update, and `docker compose logs updater` says
+what the updater did. Never publish the updater's port: its API has no
+authentication.
+
+Set up [backups](#backups) first: migrations run without anyone watching.
 
 ### On Coolify
+
+On Coolify, the image tag in `CONNECTOR_VERSION` decides what installs: a
+series such as `0.1` gets its releases, `latest` every release (also those
+with upgrade steps). The channel cannot be changed.
 
 1. Under Settings > Advanced, turn on API Access if it is off.
 2. Under Keys & Tokens > API Tokens, create a token with only the `deploy`
@@ -192,13 +215,24 @@ docker compose run --rm -T --pull always updater host-setup > updater-setup.sh
 sh updater-setup.sh
 ```
 
-The first command starts the image the tag points to now, which the updater
-takes as installed. The second writes the setup script from the updater's
-image; read it before you run it. The script installs a systemd unit that
-waits for the updater's request, then pulls the new image and runs
-`docker compose up -d`, migrations first. `docker compose logs updater` names
-the tag it watches, and `journalctl -u meldgrove-updater-connector.service`
-shows each installation. `sh updater-setup.sh remove` switches it off.
+The first command starts the version in `CONNECTOR_VERSION`, which the
+updater takes as installed. The second writes the setup script from the
+updater's image; read it before you run it. The script installs a systemd
+unit that waits for the updater's requests. For each installation, it writes
+the exact version into `CONNECTOR_VERSION` in `.env`, pulls the image, runs
+`docker compose up -d --wait` (migrations first), and goes back to the
+version before when the app does not become healthy. It installs images,
+not files: when a release changes `compose.yaml`, its upgrade steps say so.
+`journalctl -u meldgrove-updater-connector.service` shows each installation;
+`sh updater-setup.sh remove` switches it off.
+
+```sh
+docker compose exec updater updater channel preview   # or stable
+docker compose exec updater updater install 0.2.0     # now, also a new series
+```
+
+A version that failed to install is not tried again automatically; a newer
+one is.
 
 ## Backups
 
