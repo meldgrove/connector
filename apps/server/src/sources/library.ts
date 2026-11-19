@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { libraryConfigSchema } from "@connector/shared/api/sources";
+import { libraryConfigSchema } from "@connector/shared/api/sources";
 import { indexAdapter, type IndexedItem } from "./index-store";
 
 /*
@@ -7,7 +7,8 @@ import { indexAdapter, type IndexedItem } from "./index-store";
  * note, `note.removed` its ID (Library docs/webhooks.md). Notes for
  * everyone are visible to everyone who may use the source; team notes only
  * to the team: members of the Keycloak group the note names, or of
- * `<teamGroupPrefix>/<team name>`. Without either, nobody sees them.
+ * `<teamGroupPrefix>/<team name>` (the prefix as set now, read at every
+ * search). Without either, nobody sees them.
  */
 
 export const libraryPayloadSchema = z.discriminatedUnion("event", [
@@ -40,12 +41,11 @@ export const libraryPayloadSchema = z.discriminatedUnion("event", [
 export type LibraryPayload = z.infer<typeof libraryPayloadSchema>;
 type ChangedNote = Extract<LibraryPayload, { event: "note.changed" }>["note"];
 
-export function libraryItem(note: ChangedNote, config: z.infer<typeof libraryConfigSchema>): IndexedItem {
+export function libraryItem(note: ChangedNote): IndexedItem {
   const groups: string[] = [];
   if (note.visibility === "team" && note.team) {
     if (note.team.directory_id) groups.push(`kc:${note.team.directory_id}`);
-    const prefix = config.teamGroupPrefix?.replace(/\/+$/, "");
-    if (prefix) groups.push(`group:${prefix}/${note.team.name}`);
+    groups.push(`team:${note.team.name}`);
   }
   const header = [
     note.document_type ? `Type: ${note.document_type}` : null,
@@ -84,4 +84,6 @@ export function libraryItem(note: ChangedNote, config: z.infer<typeof libraryCon
   };
 }
 
-export const libraryAdapter = indexAdapter("library", () => "library");
+export const libraryAdapter = indexAdapter("library", () => "library", {
+  teamPrefix: (config) => libraryConfigSchema.safeParse(config).data?.teamGroupPrefix ?? null,
+});

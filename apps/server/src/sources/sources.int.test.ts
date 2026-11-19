@@ -98,12 +98,27 @@ describe("sources", () => {
     const outsider = await createUser({ signInGroups: ["/guests"] });
     expect((await request("GET", "/api/v1/sources", { userId: outsider.id })).body.items).toEqual([]);
 
+    // Tokens are pasted without line breaks.
+    const broken = await request("PATCH", `/api/v1/admin/sources/${created.body.id}`, {
+      userId: admin.id,
+      body: { secret: { serviceToken: "kn_svc_a\nb" } },
+    });
+    expect(Object.keys(broken.body.error.fields)).toEqual(["secret.serviceToken"]);
+    // Another address: the credentials of the old one are removed.
+    const moved = await request("PATCH", `/api/v1/admin/sources/${created.body.id}`, {
+      userId: admin.id,
+      body: { config: { baseUrl: "https://handbook.example.net", ruleSpaces: [] } },
+    });
+    expect(moved.body).toMatchObject({ secrets: {}, status: null });
+    const [stored] = await getDb().select().from(sources).where(eq(sources.id, created.body.id));
+    expect(stored!.secretEncrypted).toBeNull();
+
     expect(
       (await request("DELETE", `/api/v1/admin/sources/${created.body.id}`, { userId: admin.id })).status,
     ).toBe(204);
     expect((await request("GET", "/api/v1/admin/sources", { userId: admin.id })).body.items).toEqual([]);
     const actions = (await getDb().select().from(auditLog)).map((entry) => entry.action).sort();
-    expect(actions).toEqual(["source.create", "source.delete", "source.update"]);
+    expect(actions).toEqual(["source.create", "source.delete", "source.update", "source.update"]);
   });
 
   it("generate webhook secrets for webhook sources and show the webhook URL", async () => {

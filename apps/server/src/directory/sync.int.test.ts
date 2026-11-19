@@ -21,8 +21,6 @@ function realm(
       const group = Object.values(memberships).find((item) => item.id === groupId);
       return people.filter((person) => group?.members.includes(person.id));
     },
-    membersOf: async () => new Map(),
-    check: async () => undefined,
   };
 }
 
@@ -30,12 +28,27 @@ describe("Keycloak directory sync", () => {
   beforeEach(resetDatabase);
 
   it("keeps people, groups and memberships in step, and blocks disabled people", async () => {
-    const ada = await createUser({ email: "ada@example.org", name: "Ada" });
+    // Ada's last sign-in still names a team she has left in Keycloak.
+    const ada = await createUser({ email: "ada@example.org", name: "Ada", signInGroups: ["/teams/Old"] });
     const agent = await createToken(ada.id, "Claude");
     await createGroup("Finance", [ada.id]);
     const people: KeycloakUser[] = [
-      { id: "kc-ada", email: "ada@example.org", firstName: "Ada", lastName: "Lovelace", enabled: true },
-      { id: "kc-rita", email: "Rita@example.org", firstName: "Rita", lastName: "Reader", enabled: true },
+      {
+        id: "kc-ada",
+        email: "ada@example.org",
+        emailVerified: true,
+        firstName: "Ada",
+        lastName: "Lovelace",
+        enabled: true,
+      },
+      {
+        id: "kc-rita",
+        email: "Rita@example.org",
+        emailVerified: true,
+        firstName: "Rita",
+        lastName: "Reader",
+        enabled: true,
+      },
       { id: "kc-bot", username: "bot", enabled: true },
     ];
     await syncDirectory(
@@ -118,5 +131,32 @@ describe("Keycloak directory sync with ACCESS_GROUPS", () => {
       delete process.env.ACCESS_GROUPS;
       resetConfigForTests();
     }
+  });
+});
+
+describe("Keycloak directory sync and identities", () => {
+  beforeEach(resetDatabase);
+
+  it("adopts a person by email only when Keycloak verified it, and admin rights stay with the address", async () => {
+    const root = await createUser({ email: "root@example.org", isAdmin: true });
+    await getDb().update(users).set({ adminSource: "environment" }).where(eq(users.id, root.id));
+    const claim: KeycloakUser = {
+      id: "kc-x",
+      email: "root@example.org",
+      firstName: "Mallory",
+      enabled: true,
+      emailVerified: false,
+    };
+    await syncDirectory(realm([claim], {}));
+    const [untouched] = await getDb().select().from(users).where(eq(users.id, root.id));
+    expect(untouched).toMatchObject({ directoryId: null, name: root.name });
+
+    // Verified, the person is adopted; when their address changes, ADMIN_EMAILS no longer makes them admin.
+    claim.emailVerified = true;
+    await syncDirectory(realm([claim], {}));
+    claim.email = "mallory@example.org";
+    await syncDirectory(realm([claim], {}));
+    const [moved] = await getDb().select().from(users).where(eq(users.id, root.id));
+    expect(moved).toMatchObject({ email: "mallory@example.org", isAdmin: false, adminSource: null });
   });
 });

@@ -37,7 +37,11 @@ beforeAll(async () => {
           },
         };
       case "POST /oauth/register":
-        return { status: 201, json: { client_id: "connector-client", client_secret: "client-secret" } };
+        return {
+          delayMs: 50,
+          status: 201,
+          json: { client_id: "connector-client", client_secret: "client-secret" },
+        };
       case "POST /oauth/token":
         if (form.client_id !== "connector-client" || form.client_secret !== "client-secret")
           return { status: 401, json: { error: "invalid_client" } };
@@ -114,6 +118,10 @@ beforeAll(async () => {
           : { status: 403, json: {} };
       case `POST /api/v1/change-sets/7/pages/${PAGE_ID}/edit`:
         return { json: {} };
+      case "GET /api/v1/spaces/it/pages/by-path":
+        return req.url.searchParams.get("path") === "vpn"
+          ? { json: { id: PAGE_ID } }
+          : { status: 404, json: { error: { code: "not_found", message: "Not found" } } };
       case "PUT /api/v1/change-sets/7/pages":
         return { json: {} };
       case "POST /api/v1/change-sets/7/submit":
@@ -286,11 +294,65 @@ describe("linked accounts", () => {
       markdown: '---\ntitle: "Wi-Fi: guests"\n---\n\nAsk at the desk.\n',
     });
 
+    // A new page only at a free path; a taken one would be replaced.
+    const taken = await request("POST", "/api/v1/proposals", {
+      token: agent,
+      body: {
+        newPage: { space: "it", path: "vpn", title: "VPN", body: "x" },
+        title: "VPN",
+        description: "x",
+      },
+    });
+    expect(taken.status).toBe(409);
+    expect(taken.body.error.message).toContain("A page exists at it/vpn");
+
     expect((await request("DELETE", "/api/v1/links/handbook", { userId: rita.id })).status).toBe(204);
     expect(
       handbook.requests.some((req) => req.path === "/oauth/revoke" && req.body.includes("token=rt-1")),
     ).toBe(true);
     expect((await request("DELETE", "/api/v1/links/handbook", { userId: rita.id })).status).toBe(404);
+  });
+
+  it("register Connector once, also when two people start linking at the same time", async () => {
+    await createSource({
+      kind: "handbook",
+      config: { baseUrl: handbook.url, ruleSpaces: [], allowLinking: true },
+      secret: { serviceToken: "svc" },
+    });
+    const [rita, eddie] = [await createUser(), await createUser()];
+    const started = await Promise.all([
+      request("POST", "/api/v1/links/handbook", { userId: rita.id }),
+      request("POST", "/api/v1/links/handbook", { userId: eddie.id }),
+    ]);
+    expect(started.map((response) => response.status)).toEqual([200, 200]);
+    expect(handbook.requests.filter((req) => req.path === "/oauth/register")).toHaveLength(1);
+  });
+
+  it("refuse links to sources the person may not use, and sign-in servers elsewhere", async () => {
+    await createSource({
+      kind: "handbook",
+      config: { baseUrl: handbook.url, ruleSpaces: [], allowLinking: true },
+      accessGroups: ["/staff"],
+    });
+    const guest = await createUser({ signInGroups: ["/guests"] });
+    expect((await request("POST", "/api/v1/links/handbook", { userId: guest.id })).status).toBe(404);
+    const elsewhere = await startFakeApp(() => ({
+      json: { resource: "x", authorization_servers: [handbook.url] },
+    }));
+    try {
+      await createSource({
+        kind: "handbook",
+        slug: "other",
+        config: { baseUrl: elsewhere.url, ruleSpaces: [], allowLinking: true },
+      });
+      const refused = await request("POST", "/api/v1/links/other", { userId: guest.id });
+      expect(refused.status).toBe(404);
+      expect(refused.body.error.message).toBe(
+        "The source's sign-in server is on another address than the source",
+      );
+    } finally {
+      await elsewhere.close();
+    }
   });
 
   it("refuse links where the source does not allow them", async () => {

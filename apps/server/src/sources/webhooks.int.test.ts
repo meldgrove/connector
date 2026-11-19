@@ -176,7 +176,7 @@ describe("webhooks", () => {
     const [stored] = await getDb().select().from(items).where(eq(items.sourceId, library.id));
     expect(stored).toMatchObject({
       visibility: "groups",
-      visibilityGroups: ["kc:kc-programs", "group:/teams/Programs"],
+      visibilityGroups: ["kc:kc-programs", "team:Programs"],
       status: "confirmed by its owner",
     });
 
@@ -189,7 +189,18 @@ describe("webhooks", () => {
         (result: { id: string }) => result.id,
       );
     expect(await search(outsider.id)).toEqual([]);
+    // A SCIM group with the same external ID is not the Keycloak group.
+    await createGroup("Lookalike", [outsider.id], { source: "scim", externalId: "kc-programs" });
+    expect(await search(outsider.id)).toEqual([]);
     expect(await search(byName.id)).toEqual([`library:note:${stored!.externalId}`]);
+    expect(await search(byId.id)).toEqual([`library:note:${stored!.externalId}`]);
+
+    // The prefix counts as set now: without it, only the Keycloak group ID admits.
+    await getDb()
+      .update(sources)
+      .set({ config: { baseUrl: "https://library.example.org", teamGroupPrefix: null } })
+      .where(eq(sources.id, library.id));
+    expect(await search(byName.id)).toEqual([]);
     expect(await search(byId.id)).toEqual([`library:note:${stored!.externalId}`]);
 
     // Now for everyone.

@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { DbOrTx } from "../db/client";
 import { groupMembers, groups, users } from "../db/schema";
 
-/** A person's groups: names (sign-in claim and directory) and the directory's group IDs. */
+/** A person's groups: names (sign-in claim and directory) and the IDs of their Keycloak groups. */
 export type GroupSet = { names: string[]; externalIds: string[] };
 
 export const NO_GROUPS: GroupSet = { names: [], externalIds: [] };
@@ -14,14 +14,15 @@ export async function groupsOfUser(db: DbOrTx, userId: string): Promise<GroupSet
     .from(users)
     .where(eq(users.id, userId));
   const rows = await db
-    .select({ name: groups.name, externalId: groups.externalId })
+    .select({ name: groups.name, externalId: groups.externalId, source: groups.source })
     .from(groupMembers)
     .innerJoin(groups, eq(groups.id, groupMembers.groupId))
     .where(eq(groupMembers.userId, userId));
   const names = new Set([...(person?.signInGroups ?? []), ...rows.map((row) => row.name)]);
   return {
     names: [...names].sort((a, b) => a.localeCompare(b)),
-    externalIds: rows.flatMap((row) => (row.externalId ? [row.externalId] : [])),
+    // Only Keycloak's own group IDs: a SCIM client chooses its externalIds.
+    externalIds: rows.flatMap((row) => (row.externalId && row.source === "keycloak" ? [row.externalId] : [])),
   };
 }
 

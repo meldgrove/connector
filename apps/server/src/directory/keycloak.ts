@@ -21,6 +21,7 @@ const userSchema = z.object({
   firstName: z.string().optional(),
   lastName: z.string().optional(),
   email: z.string().optional(),
+  emailVerified: z.boolean().optional(),
   enabled: z.boolean().optional(),
 });
 export type KeycloakUser = z.infer<typeof userSchema>;
@@ -51,10 +52,6 @@ export type KeycloakClient = {
   groups(): Promise<KeycloakGroup[]>;
   /** The direct members of a group. */
   directMembers(groupId: string): Promise<KeycloakUser[]>;
-  /** Members of a group and of its subgroups, by user ID. */
-  membersOf(groupPath: string): Promise<Map<string, KeycloakUser>>;
-  /** Fails with a plain message when the service account cannot read the groups. */
-  check(groupPaths: string[]): Promise<void>;
 };
 
 export function createKeycloakClient(options?: {
@@ -142,34 +139,8 @@ export function createKeycloakClient(options?: {
     }
   }
 
-  async function groupByPath(path: string) {
-    const encoded = path
-      .split("/")
-      .filter(Boolean)
-      .map((segment) => encodeURIComponent(segment))
-      .join("/");
-    const group = await getJson(`/group-by-path/${encoded}`, groupSchema);
-    if (!group) throw new DirectoryError(`The Keycloak group ${path} does not exist`);
-    return group;
-  }
-
   const children = (groupId: string) =>
     paged(`/groups/${encodeURIComponent(groupId)}/children?briefRepresentation=true`, groupSchema);
-
-  async function membersOfId(groupId: string, seen: Set<string>): Promise<Map<string, KeycloakUser>> {
-    const members = new Map<string, KeycloakUser>();
-    if (seen.has(groupId)) return members;
-    seen.add(groupId);
-    const list = await paged(
-      `/groups/${encodeURIComponent(groupId)}/members?briefRepresentation=true`,
-      userSchema,
-    );
-    for (const user of list) members.set(user.id, user);
-    for (const child of await children(groupId)) {
-      for (const [id, user] of await membersOfId(child.id, seen)) members.set(id, user);
-    }
-    return members;
-  }
 
   return {
     async userGroups(userId) {
@@ -199,12 +170,6 @@ export function createKeycloakClient(options?: {
     },
     async directMembers(groupId) {
       return paged(`/groups/${encodeURIComponent(groupId)}/members?briefRepresentation=true`, userSchema);
-    },
-    async membersOf(groupPath) {
-      return membersOfId((await groupByPath(groupPath)).id, new Set());
-    },
-    async check(groupPaths) {
-      for (const path of groupPaths) await groupByPath(path);
     },
   };
 }

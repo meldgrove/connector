@@ -54,9 +54,16 @@ export const libraryConfigSchema = z.object({
   teamGroupPrefix: nullableText(200).default(null),
 });
 
+/** A token sent as a bearer header: printable characters, no spaces or line breaks. */
+const tokenSchema = z
+  .string()
+  .trim()
+  .max(300)
+  .regex(/^[\x21-\x7e]*$/, "Paste the token without spaces or line breaks");
+
 /** Secrets of each kind; stored encrypted, never shown again (blank keeps the stored one). */
-export const handbookSecretSchema = z.object({ serviceToken: z.string().trim().max(300).optional() });
-export const crmSecretSchema = z.object({ apiKey: z.string().trim().max(300).optional() });
+export const handbookSecretSchema = z.object({ serviceToken: tokenSchema.optional() });
+export const crmSecretSchema = z.object({ apiKey: tokenSchema.optional() });
 export const webhookSecretSchema = z.object({
   webhookSecret: z.string().trim().min(16, "Use at least 16 characters").max(300).optional(),
 });

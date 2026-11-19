@@ -14,7 +14,7 @@ Source order: when sources disagree, the higher one wins:
 4. Logbook history (updates, learnings, replaced decisions)
 5. Records (CRM)
 6. Library notes (summaries of outside sources)
-If a newer decision contradicts a page, name both, follow the decision, and suggest updating the page. Never rely on a decision that is "superseded by" another.
+If a newer decision contradicts a knowledge base page, name both, follow the decision, and suggest updating the page. Purpose and rules stand above decisions. Never rely on a decision that is "superseded by" another.
 
 Cite: link every claim to its item's url. Say when something is missing or a source did not answer; do not guess.
 

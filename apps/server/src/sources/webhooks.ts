@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { Hono, type Context } from "hono";
 import { bodyLimit } from "hono/body-limit";
-import { libraryConfigSchema } from "@connector/shared/api/sources";
 import { getDb } from "../db/client";
 import type { AppEnv } from "../http/env";
 import { logger } from "../logger";
@@ -121,11 +120,7 @@ export function webhookRoutes() {
       await recordDelivery(db, source.id, "Removed a note");
       return reply(c, 200, "Removed");
     }
-    const config = libraryConfigSchema.safeParse(source.config);
-    const item = libraryItem(
-      parsed.data.note,
-      config.success ? config.data : { baseUrl: "", teamGroupPrefix: null },
-    );
+    const item = libraryItem(parsed.data.note);
     await upsertItem(db, source.id, item);
     await recordDelivery(db, source.id, `Received ${item.ref}`);
     return reply(c, 200, `Stored ${item.ref}`);

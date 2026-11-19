@@ -103,7 +103,7 @@ beforeAll(async () => {
           type: "policy",
           tags: [],
           revision: 1,
-          updatedAt: "2026-12-01T10:00:00.000Z",
+          updatedAt: "2026-09-01T10:00:00.000Z",
           body: "Travel by train.",
           properties: {},
           updatedBy: null,
@@ -304,30 +304,27 @@ async function setup() {
     }),
   );
   const note = (id: string, visibility: "all" | "team", title: string) =>
-    libraryItem(
-      {
-        id,
-        ref: `LIB-${id}`,
-        url: `https://library.example.org/n/${id}`,
-        title,
-        core: `${title}: remote volunteers stay longer.`,
-        key_points: [],
-        text: `${title}. Remote volunteers stay longer.`,
-        visibility,
-        team: visibility === "team" ? { name: "Programs", directory_id: null } : null,
-        owner: "Erika",
-        document_type: "Study",
-        project: null,
-        tags: [],
-        source_url: null,
-        doi: null,
-        language: "en",
-        checked: true,
-        published_at: "2026-11-01T00:00:00.000Z",
-        changed_at: "2026-11-01T00:00:00.000Z",
-      },
-      { baseUrl: "https://library.example.org", teamGroupPrefix: "/teams" },
-    );
+    libraryItem({
+      id,
+      ref: `LIB-${id}`,
+      url: `https://library.example.org/n/${id}`,
+      title,
+      core: `${title}: remote volunteers stay longer.`,
+      key_points: [],
+      text: `${title}. Remote volunteers stay longer.`,
+      visibility,
+      team: visibility === "team" ? { name: "Programs", directory_id: null } : null,
+      owner: "Erika",
+      document_type: "Study",
+      project: null,
+      tags: [],
+      source_url: null,
+      doi: null,
+      language: "en",
+      checked: true,
+      published_at: "2026-11-01T00:00:00.000Z",
+      changed_at: "2026-11-01T00:00:00.000Z",
+    });
   await upsertItem(getDb(), library.id, note("1", "all", "Volunteer study"));
   await upsertItem(getDb(), library.id, note("2", "team", "Programs team study"));
   return { handbookSource };

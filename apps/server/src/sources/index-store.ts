@@ -130,14 +130,26 @@ export async function removeItem(db: DbOrTx, sourceId: string, externalId: strin
   return removed.length > 0;
 }
 
-/** The visibility keys of a caller: `group:<name>` and `kc:<id>`. */
-export function visibilityKeys(principal: Principal): string[] {
+/**
+ * The visibility keys of a caller: `kc:<id>` for their Keycloak groups, and
+ * `team:<name>` for their groups below `teamPrefix` (`/teams/Programs` with
+ * the prefix `/teams` is the team "Programs"). Service tokens have none.
+ */
+export function visibilityKeys(principal: Principal, teamPrefix: string | null = null): string[] {
   if (principal.kind === "service") return [];
-  return [...principal.groups.map((name) => `group:${name}`), ...principal.groupIds.map((id) => `kc:${id}`)];
+  const keys = principal.groupIds.map((id) => `kc:${id}`);
+  const prefix = teamPrefix?.trim().replace(/^\/+|\/+$/g, "");
+  if (prefix) {
+    for (const group of principal.groups) {
+      const name = group.replace(/^\/+|\/+$/g, "");
+      if (name.startsWith(`${prefix}/`)) keys.push(`team:${name.slice(prefix.length + 1)}`);
+    }
+  }
+  return keys;
 }
 
-function visible(principal: Principal): SQL {
-  const keys = visibilityKeys(principal);
+function visible(principal: Principal, teamPrefix: string | null): SQL {
+  const keys = visibilityKeys(principal, teamPrefix);
   if (keys.length === 0) return sql`${items.visibility} = 'all'`;
   const array = sql`array[${sql.join(
     keys.map((key) => sql`${key}`),
@@ -155,11 +167,17 @@ function snippetOf(text: string) {
   return flat.length > MAX_SNIPPET ? `${flat.slice(0, MAX_SNIPPET - 1)}…` : flat;
 }
 
-/** An index adapter for a webhook kind; `authorityOf` places items in the source order. */
+/**
+ * An index adapter for a webhook kind; `authorityOf` places items in the
+ * source order; `teamPrefix` reads the team group prefix from the source's
+ * settings (Library).
+ */
 export function indexAdapter(
   kind: SourceKind,
   authorityOf: (row: Pick<Row, "type" | "inForce">) => Authority,
+  options: { teamPrefix?: (config: Record<string, unknown>) => string | null } = {},
 ): Adapter {
+  const teamPrefix = (config: Record<string, unknown>) => options.teamPrefix?.(config) ?? null;
   const hit = (row: Row, snippet?: string | null): Hit => ({
     type: row.type,
     externalId: row.externalId,
@@ -207,7 +225,7 @@ export function indexAdapter(
           and(
             eq(items.sourceId, context.source.id),
             sql`(${items.searchVector} @@ ${q} or upper(coalesce(${items.ref}, '')) = ${ref})`,
-            visible(context.principal),
+            visible(context.principal, teamPrefix(context.config)),
           ),
         )
         .orderBy(desc(score), desc(sql`coalesce(${items.changedAt}, ${items.occurredAt})`))
@@ -224,7 +242,7 @@ export function indexAdapter(
             eq(items.sourceId, context.source.id),
             eq(items.externalId, externalId),
             eq(items.type, type),
-            visible(context.principal),
+            visible(context.principal, teamPrefix(context.config)),
           ),
         );
       if (!row) return null;
@@ -238,7 +256,7 @@ export function indexAdapter(
                 and(
                   eq(items.sourceId, context.source.id),
                   inArray(items.ref, refs),
-                  visible(context.principal),
+                  visible(context.principal, teamPrefix(context.config)),
                 ),
               )
           : [];
@@ -279,7 +297,7 @@ export function indexAdapter(
           and(
             eq(items.sourceId, context.source.id),
             gte(sql`coalesce(${items.changedAt}, ${items.occurredAt}, ${items.updatedAt})`, since),
-            visible(context.principal),
+            visible(context.principal, teamPrefix(context.config)),
           ),
         )
         .orderBy(desc(sql`coalesce(${items.changedAt}, ${items.occurredAt}, ${items.updatedAt})`))

@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { DirectoryStatus } from "@connector/shared/api/users";
 import { config } from "../config";
 import { getDb, type DbOrTx } from "../db/client";
-import { groupMembers, groups, settings, users } from "../db/schema";
+import { accounts, groupMembers, groups, settings, users } from "../db/schema";
 import { putSetting } from "../core/settings";
 import { logger } from "../logger";
 import { setDirectoryActive } from "../admin/service";
@@ -53,20 +53,8 @@ export async function syncDirectory(
 ): Promise<{ people: number }> {
   const db = getDb();
   try {
-    const realmGroups = await client.groups();
-    const members = new Map<string, string[]>();
-    const pathsOf = new Map<string, string[]>();
-    for (const group of realmGroups) {
-      const ids = (await client.directMembers(group.id)).map((user) => user.id);
-      members.set(group.id, ids);
-      for (const id of ids) pathsOf.set(id, [...(pathsOf.get(id) ?? []), group.path]);
-    }
-    const required = config().accessGroups;
-    const mayUse = (user: KeycloakUser) =>
-      required.length === 0 ||
-      isEnvironmentAdmin(user.email ?? "") ||
-      inAnyGroup(pathsOf.get(user.id) ?? [], required);
-    const realmUsers = (await client.users()).filter((user) => usable(user) && mayUse(user));
+    // The lock comes first and holds through the commit, so an older
+    // snapshot never lands after a newer one.
     const count = await db.transaction(async (tx) => {
       const [lock] = await tx
         .execute<{ locked: boolean }>(
@@ -75,24 +63,70 @@ export async function syncDirectory(
         .then((result) => result.rows);
       if (!lock?.locked) return null;
 
+      const realmGroups = await client.groups();
+      const members = new Map<string, string[]>();
+      const pathsOf = new Map<string, string[]>();
+      for (const group of realmGroups) {
+        const ids = (await client.directMembers(group.id)).map((user) => user.id);
+        members.set(group.id, ids);
+        for (const id of ids) pathsOf.set(id, [...(pathsOf.get(id) ?? []), group.path]);
+      }
+      const required = config().accessGroups;
+      const mayUse = (user: KeycloakUser) =>
+        required.length === 0 ||
+        isEnvironmentAdmin(user.email ?? "") ||
+        inAnyGroup(pathsOf.get(user.id) ?? [], required);
+      const realmUsers = (await client.users()).filter((user) => usable(user) && mayUse(user));
+
       const idsByKeycloakId = new Map<string, string>();
       for (const user of realmUsers) {
         const email = user.email!.trim().toLowerCase();
-        const [existing] = await tx
+        // The person this Keycloak user is: bound by directory ID or by the
+        // sign-in's subject; by email address only when Keycloak verified it
+        // (as at sign-in) and the person is bound to nobody else.
+        const [bound] = await tx
           .select({
             id: users.id,
             email: users.email,
             directorySource: users.directorySource,
+            adminSource: users.adminSource,
           })
           .from(users)
           .where(
             or(
               and(eq(users.directorySource, "keycloak"), eq(users.directoryId, user.id)),
-              eq(users.email, email),
+              sql`exists (select 1 from ${accounts} a where a.user_id = ${users.id} and a.provider_id = 'oidc' and a.account_id = ${user.id})`,
             ),
           )
-          .orderBy(sql`(${users.directoryId} = ${user.id}) desc nulls last`)
           .limit(1);
+        let existing = bound;
+        if (!existing) {
+          const [byEmail] = await tx
+            .select({
+              id: users.id,
+              email: users.email,
+              directorySource: users.directorySource,
+              adminSource: users.adminSource,
+              directoryId: users.directoryId,
+              otherSubject: sql<boolean>`exists (select 1 from ${accounts} a where a.user_id = ${users.id} and a.provider_id = 'oidc')`,
+            })
+            .from(users)
+            .where(eq(users.email, email));
+          const verified = user.emailVerified === true || !config().OIDC_REQUIRE_EMAIL_VERIFIED;
+          if (
+            byEmail &&
+            (!verified ||
+              byEmail.otherSubject ||
+              (byEmail.directoryId && byEmail.directorySource === "keycloak"))
+          ) {
+            logger.warn(
+              { userId: byEmail.id },
+              "a Keycloak user's email address belongs to another person; skipped",
+            );
+            continue;
+          }
+          existing = byEmail;
+        }
         let id: string;
         if (existing) {
           id = existing.id;
@@ -101,6 +135,7 @@ export async function syncDirectory(
               existing.email === email
                 ? []
                 : await tx.select({ id: users.id }).from(users).where(eq(users.email, email));
+            const moves = !taken && existing.email !== email;
             await tx
               .update(users)
               .set({
@@ -108,7 +143,11 @@ export async function syncDirectory(
                 directorySource: "keycloak",
                 directoryId: user.id,
                 updatedAt: sql`now()`,
-                ...(taken ? {} : { email }),
+                ...(moves ? { email } : {}),
+                // Admin through ADMIN_EMAILS belongs to the address, not the person.
+                ...(moves && existing.adminSource === "environment" && !isEnvironmentAdmin(email)
+                  ? { isAdmin: false, adminSource: null }
+                  : {}),
               })
               .where(eq(users.id, id));
           }
@@ -119,6 +158,11 @@ export async function syncDirectory(
             .returning({ id: users.id });
           id = created!.id;
         }
+        // Keycloak's groups are the person's groups now, also for the grants of the last sign-in.
+        await tx
+          .update(users)
+          .set({ signInGroups: pathsOf.get(user.id) ?? [] })
+          .where(eq(users.id, id));
         idsByKeycloakId.set(user.id, id);
         const [person] = await tx
           .select({ directorySource: users.directorySource })
@@ -144,7 +188,10 @@ export async function syncDirectory(
               : sql`true`,
           ),
         );
-      for (const person of gone) await setDirectoryActive(tx, person.id, false);
+      for (const person of gone) {
+        await setDirectoryActive(tx, person.id, false);
+        await tx.update(users).set({ signInGroups: [] }).where(eq(users.id, person.id));
+      }
 
       // Groups: by Keycloak ID; a name an app or SCIM group already has stays theirs.
       const keptGroupIds: string[] = [];

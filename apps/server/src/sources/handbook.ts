@@ -284,6 +284,21 @@ export async function proposeHandbookChange(
     space = (await call(`/pages/${proposal.page.id}`, "GET", pageSchema)).space;
   } else if (proposal.newPage) {
     space = proposal.newPage.space;
+    // Putting a file at a taken path would replace that page: only new paths.
+    const existing = await call(
+      `/spaces/${encodeURIComponent(space)}/pages/by-path?path=${encodeURIComponent(proposal.newPage.path)}`,
+      "GET",
+      z.object({ id: z.string() }),
+    ).catch((error: unknown) => {
+      if (error instanceof SourceError && error.status === 404) return null;
+      throw error;
+    });
+    if (existing) {
+      throw new SourceError(
+        `A page exists at ${space}/${proposal.newPage.path}: propose edits to it (handbook:page:${existing.id})`,
+        409,
+      );
+    }
   } else {
     throw new SourceError("Name a page to change or a new page");
   }

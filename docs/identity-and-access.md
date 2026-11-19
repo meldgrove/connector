@@ -84,10 +84,12 @@ Directory**):
 - `ServiceProviderConfig`, `ResourceTypes`, `Schemas`.
 
 Creating a user whose email address exists (someone who signed in before)
-takes that person over. `active: false` blocks the person, ends their
+takes that person over. Deleting a user removes the person as an admin
+would: if the provider still lets them sign in, they come back as a new
+person. So let the identity system deactivate people (`active: false`)
+rather than delete them; Meldgrove IAM's _Deactivate the user_ does that. `active: false` blocks the person, ends their
 sessions and revokes their agents; `true` lifts only the directory's block.
-Deleting a user removes the person as an admin would. Groups from Keycloak
-cannot be changed through SCIM.
+Groups from Keycloak cannot be changed through SCIM.
 
 **Meldgrove IAM:** add Connector as a _SCIM 2.0_ app connection with the
 SCIM address and token. IAM imports groups and does not create them:

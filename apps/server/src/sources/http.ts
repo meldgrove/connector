@@ -40,7 +40,7 @@ export async function sourceRequest<T extends z.ZodType>(
   } catch (error) {
     if (options.signal.aborted) throw new SourceError(`${options.app} did not answer in time`);
     throw new SourceError(
-      `Could not reach ${options.app} at ${new URL(url).origin}: ${(error as Error).message}`,
+      `Could not reach ${options.app} at ${new URL(url).origin}: ${fetchErrorCode(error)}`,
     );
   }
   if (response.status >= 300 && response.status < 400) {
@@ -79,6 +79,15 @@ async function readLimited(response: Response, app: string): Promise<string> {
   const buffer = await response.arrayBuffer();
   if (buffer.byteLength > MAX_RESPONSE_BYTES) throw new SourceError(`${app} sent too much data`);
   return new TextDecoder().decode(buffer);
+}
+
+/**
+ * Why a request failed, as a code (ECONNREFUSED, ENOTFOUND, …): never the
+ * error's message, which can quote request headers.
+ */
+export function fetchErrorCode(error: unknown): string {
+  const cause = (error as { cause?: { code?: unknown } } | null)?.cause;
+  return typeof cause?.code === "string" ? cause.code : "connection failed";
 }
 
 /** The `{ error: { message } }` of a Meldgrove app, shortened. */

@@ -10,7 +10,7 @@ import type {
 import { SOURCE_KIND_INFO, type SourceKind } from "@connector/shared/sources";
 import { config } from "../config";
 import type { Db } from "../db/client";
-import { items, sourceLinks, sources } from "../db/schema";
+import { items, linkRequests, sourceLinks, sources } from "../db/schema";
 import type { Principal, UserPrincipal } from "../auth/principal";
 import { decryptJson, encryptJson, secretHint, SecretDecryptionError } from "../core/crypto";
 import { audit } from "../core/audit";
@@ -45,6 +45,14 @@ export function secretOf(row: SourceRow): Record<string, unknown> {
       return {};
     }
     throw error;
+  }
+}
+
+function originOf(value: unknown): string | null {
+  try {
+    return typeof value === "string" ? new URL(value).origin : null;
+  } catch {
+    return null;
   }
 }
 
@@ -193,6 +201,19 @@ export async function updateSource(
     set.config = parsed.data;
     changes.push("changed its settings");
   }
+  // Credentials of a live source belong to its address: a new origin drops
+  // them (unless new ones come along), the linked accounts and Connector's
+  // registration there, so nothing is sent to the new address unasked.
+  const moved =
+    !isWebhookKind(row.kind) &&
+    set.config !== undefined &&
+    originOf(set.config.baseUrl) !== originOf(row.config.baseUrl);
+  if (moved) {
+    set.secretEncrypted = null;
+    set.oauthClientEncrypted = null;
+    set.status = null;
+    changes.push("moved to a new address; its credentials and linked accounts were removed");
+  }
   if (input.secret !== undefined) {
     const parsed = kind.secret.safeParse(input.secret);
     if (!parsed.success) {
@@ -203,12 +224,16 @@ export async function updateSource(
     }
     const given = cleanSecret(parsed.data);
     if (Object.keys(given).length > 0) {
-      set.secretEncrypted = encryptJson({ ...secretOf(row), ...given });
+      set.secretEncrypted = encryptJson({ ...(moved ? {} : secretOf(row)), ...given });
       changes.push(`replaced ${Object.keys(given).join(", ")}`);
     }
   }
   const [updated] = await db.transaction(async (tx) => {
     const result = await tx.update(sources).set(set).where(eq(sources.id, id)).returning();
+    if (moved) {
+      await tx.delete(sourceLinks).where(eq(sourceLinks.sourceId, id));
+      await tx.delete(linkRequests).where(eq(linkRequests.sourceId, id));
+    }
     if (changes.length > 0) {
       await audit(tx, actor, {
         action: "source.update",

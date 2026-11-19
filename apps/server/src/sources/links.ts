@@ -6,6 +6,9 @@ import type { Db, DbOrTx } from "../db/client";
 import { linkRequests, sourceLinks, sources } from "../db/schema";
 import { decryptJson, decryptSecret, encryptJson, encryptSecret } from "../core/crypto";
 import { logger } from "../logger";
+import type { UserPrincipal } from "../auth/principal";
+import { mayUse } from "./service";
+import { fetchErrorCode } from "./http";
 import { SourceError, type SourceRow } from "./types";
 
 /*
@@ -52,6 +55,20 @@ export const linkRedirectUri = () => `${config().APP_URL}/api/v1/links/callback`
 
 const baseUrlOf = (source: SourceRow) => String(source.config.baseUrl ?? "").replace(/\/+$/, "");
 
+/** Whether a person may link their account at a source: Handbook, linking on, open to them. */
+export function mayLink(principal: UserPrincipal, source: SourceRow): boolean {
+  return source.kind === "handbook" && source.config.allowLinking !== false && mayUse(principal, source);
+}
+
+/** Every discovered address must be on the source's own origin: tokens and the client secret go there. */
+function sameOrigin(source: SourceRow, address: string): boolean {
+  try {
+    return new URL(address).origin === new URL(baseUrlOf(source)).origin;
+  } catch {
+    return false;
+  }
+}
+
 async function getJson<T extends z.ZodType>(url: string, schema: T): Promise<z.infer<T>> {
   let response: Response;
   try {
@@ -61,7 +78,7 @@ async function getJson<T extends z.ZodType>(url: string, schema: T): Promise<z.i
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (error) {
-    throw new SourceError(`Could not reach ${new URL(url).origin}: ${(error as Error).message}`);
+    throw new SourceError(`Could not reach ${new URL(url).origin}: ${fetchErrorCode(error)}`);
   }
   if (!response.ok) throw new SourceError(`${new URL(url).pathname} answered HTTP ${response.status}`);
   const parsed = schema.safeParse(await response.json().catch(() => null));
@@ -82,7 +99,7 @@ async function postForm<T extends z.ZodType>(
     redirect: "manual",
     signal: AbortSignal.timeout(TIMEOUT_MS),
   }).catch((error: unknown) => {
-    throw new SourceError(`Could not reach ${new URL(url).origin}: ${(error as Error).message}`);
+    throw new SourceError(`Could not reach ${new URL(url).origin}: ${fetchErrorCode(error)}`);
   });
   const body: unknown = await response.json().catch(() => null);
   if (!response.ok) {
@@ -109,6 +126,17 @@ export async function discover(source: SourceRow): Promise<Discovery> {
   if (!(server.code_challenge_methods_supported ?? []).includes("S256")) {
     throw new SourceError("The source's sign-in server does not support PKCE (S256)");
   }
+  const endpoints = [
+    issuer,
+    server.issuer,
+    server.authorization_endpoint,
+    server.token_endpoint,
+    server.registration_endpoint,
+    server.revocation_endpoint,
+  ].filter((address): address is string => typeof address === "string");
+  if (!endpoints.every((address) => sameOrigin(source, address))) {
+    throw new SourceError("The source's sign-in server is on another address than the source");
+  }
   const value = { resource: resource.resource, server };
   discoveries.set(base, { at: Date.now(), value });
   return value;
@@ -116,54 +144,63 @@ export async function discover(source: SourceRow): Promise<Discovery> {
 
 /** Connector's registration at the source (dynamic client registration), made once. */
 async function oauthClient(db: DbOrTx, source: SourceRow, discovery: Discovery): Promise<OAuthClient> {
-  const stored = source.oauthClientEncrypted ? decryptJson<OAuthClient>(source.oauthClientEncrypted) : {};
-  if (
-    stored.clientId &&
+  const fits = (stored: Partial<OAuthClient>): stored is OAuthClient =>
+    Boolean(stored.clientId) &&
     stored.issuer === discovery.server.issuer &&
-    stored.redirectUri === linkRedirectUri()
-  ) {
-    return stored as OAuthClient;
-  }
-  if (!discovery.server.registration_endpoint) {
-    throw new SourceError("The source's sign-in server does not offer dynamic client registration");
-  }
-  const response = await fetch(discovery.server.registration_endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
-    body: JSON.stringify({
-      client_name: /^(meldgrove )?connector$/i.test(config().APP_NAME)
-        ? "Meldgrove Connector"
-        : `${config().APP_NAME} (Meldgrove Connector)`,
-      client_uri: config().APP_URL,
-      redirect_uris: [linkRedirectUri()],
-      grant_types: ["authorization_code", "refresh_token"],
-      response_types: ["code"],
-      token_endpoint_auth_method: "client_secret_post",
-    }),
-    redirect: "manual",
-    signal: AbortSignal.timeout(TIMEOUT_MS),
-  }).catch((error: unknown) => {
-    throw new SourceError(`Could not register at the source: ${(error as Error).message}`);
+    stored.redirectUri === linkRedirectUri();
+  const known = source.oauthClientEncrypted ? decryptJson<OAuthClient>(source.oauthClientEncrypted) : {};
+  if (fits(known)) return known;
+  // One registration per source: the first request registers under the row
+  // lock; one that waited reads the registration it made.
+  return db.transaction(async (tx) => {
+    const [row] = await tx
+      .select({ stored: sources.oauthClientEncrypted })
+      .from(sources)
+      .where(eq(sources.id, source.id))
+      .for("update");
+    const stored = row?.stored ? decryptJson<OAuthClient>(row.stored) : {};
+    if (fits(stored)) return stored;
+    if (!discovery.server.registration_endpoint) {
+      throw new SourceError("The source's sign-in server does not offer dynamic client registration");
+    }
+    const response = await fetch(discovery.server.registration_endpoint, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        client_name: /^(meldgrove )?connector$/i.test(config().APP_NAME)
+          ? "Meldgrove Connector"
+          : `${config().APP_NAME} (Meldgrove Connector)`,
+        client_uri: config().APP_URL,
+        redirect_uris: [linkRedirectUri()],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "client_secret_post",
+      }),
+      redirect: "manual",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    }).catch((error: unknown) => {
+      throw new SourceError(`Could not reach the source to register: ${fetchErrorCode(error)}`);
+    });
+    const body: unknown = await response.json().catch(() => null);
+    const parsed = registrationSchema.safeParse(body);
+    if (!response.ok || !parsed.success) {
+      const description = (body as { error_description?: unknown } | null)?.error_description;
+      throw new SourceError(
+        `The source refused Connector's registration${typeof description === "string" ? `: ${description}` : ""}`,
+      );
+    }
+    const client: OAuthClient = {
+      clientId: parsed.data.client_id,
+      clientSecret: parsed.data.client_secret,
+      issuer: discovery.server.issuer,
+      redirectUri: linkRedirectUri(),
+    };
+    await tx
+      .update(sources)
+      .set({ oauthClientEncrypted: encryptJson(client), updatedAt: sql`now()` })
+      .where(eq(sources.id, source.id));
+    return client;
   });
-  const body: unknown = await response.json().catch(() => null);
-  const parsed = registrationSchema.safeParse(body);
-  if (!response.ok || !parsed.success) {
-    const description = (body as { error_description?: unknown } | null)?.error_description;
-    throw new SourceError(
-      `The source refused Connector's registration${typeof description === "string" ? `: ${description}` : ""}`,
-    );
-  }
-  const client: OAuthClient = {
-    clientId: parsed.data.client_id,
-    clientSecret: parsed.data.client_secret,
-    issuer: discovery.server.issuer,
-    redirectUri: linkRedirectUri(),
-  };
-  await db
-    .update(sources)
-    .set({ oauthClientEncrypted: encryptJson(client), updatedAt: sql`now()` })
-    .where(eq(sources.id, source.id));
-  return client;
 }
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -231,9 +268,10 @@ async function accountLabel(source: SourceRow, accessToken: string): Promise<str
  */
 export async function finishLink(
   db: Db,
-  userId: string,
+  principal: UserPrincipal,
   query: { code?: string; state?: string; error?: string; iss?: string },
 ): Promise<string> {
+  const userId = principal.id;
   if (!query.state) throw new SourceError("The link request is incomplete");
   const [request] = await db
     .delete(linkRequests)
@@ -243,7 +281,7 @@ export async function finishLink(
     throw new SourceError("The link request expired; start again");
   if (request.userId !== userId) throw new SourceError("This link was started by someone else");
   const [source] = await db.select().from(sources).where(eq(sources.id, request.sourceId));
-  if (!source) throw new SourceError("The source no longer exists");
+  if (!source || !mayLink(principal, source)) throw new SourceError("You may no longer link this source");
   if (query.error)
     throw new SourceError(
       query.error === "access_denied" ? "You declined the link" : `The source refused: ${query.error}`,

@@ -261,8 +261,8 @@ const day = (value: string | null) => (value ? value.slice(0, 10) : "unknown dat
 
 /**
  * Everything about a topic, by the source order, with hints: decisions in
- * force that are newer than knowledge base pages on the same topic, and
- * replaced decisions.
+ * force that are newer than knowledge base pages on the same topic (rule
+ * pages stand above decisions), and replaced decisions.
  */
 export async function buildContext(
   db: Db,
@@ -276,7 +276,7 @@ export async function buildContext(
     // Live results without a date (Handbook pages): read their date, for the hints.
     return Promise.all(
       hits.map(async (hit) => {
-        if (hit.date || (hit.authority !== "knowledge" && hit.authority !== "rules")) return hit;
+        if (hit.date || hit.authority !== "knowledge") return hit;
         const item = await adapter.fetch(context, hit.type, hit.externalId).catch(() => null);
         return item ? { ...hit, date: item.date } : hit;
       }),
@@ -296,7 +296,8 @@ export async function buildContext(
 
   const notes: string[] = [];
   const decisions = all.filter((result) => result.authority === "decision");
-  const pages = all.filter((result) => result.authority === "knowledge" || result.authority === "rules");
+  // Rule pages stand above decisions (source order): only knowledge base pages yield.
+  const pages = all.filter((result) => result.authority === "knowledge");
   for (const decision of decisions) {
     for (const page of pages) {
       if (decision.date && page.date && decision.date > page.date) {

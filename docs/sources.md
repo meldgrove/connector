@@ -62,7 +62,7 @@ another.
 1. In Handbook, create a service token under **Administration → Service
    tokens** (it reads every page that is not a draft).
 2. In Connector, connect a source of the kind Handbook with Handbook's
-   address and the token. List the spaces that hold the purpose and the
+   public address (its `APP_URL`; linked accounts need it) and the token. List the spaces that hold the purpose and the
    rules (e.g. `purpose,policies`) as _rule spaces_.
 3. Set _Access groups_ to the groups that may sign in to Handbook
    (Handbook's `ACCESS_GROUPS`), or leave it empty when everyone may.
@@ -85,7 +85,10 @@ or `<APP_NAME> (Meldgrove Connector)` with another `APP_NAME`),
 authorization code with PKCE and the
 resource indicator. The redirect address is
 `<APP_URL>/api/v1/links/callback`; Handbook accepts it when Connector runs
-on https (or on localhost). Tokens are stored encrypted; Connector
+on https (or on localhost). Handbook's sign-in server must be on the
+source's address; Connector refuses others, because its client secret and
+the tokens go there. Changing a source's address to another host removes
+its stored credentials and the linked accounts. Tokens are stored encrypted; Connector
 refreshes them, and removes the link when Handbook ends it (the person
 links again). Unlinking revokes the tokens at Handbook.
 

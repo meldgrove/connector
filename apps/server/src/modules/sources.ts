@@ -7,7 +7,7 @@ import type { AppEnv } from "../http/env";
 import { notFound } from "../http/errors";
 import { idParam, jsonBody, requireAdmin, requireWebUser } from "../http/middleware";
 import { logger } from "../logger";
-import { finishLink, startLink, unlink } from "../sources/links";
+import { finishLink, mayLink, startLink, unlink } from "../sources/links";
 import {
   checkSource,
   createSource,
@@ -80,9 +80,7 @@ router.get("/links", async (c) => {
 router.post("/links/:slug", async (c) => {
   const principal = requireWebUser(c);
   const source = await sourceBySlug(getDb(), c.req.param("slug"));
-  if (!source || source.kind !== "handbook" || source.config.allowLinking === false || !source.enabled) {
-    throw notFound("This source does not take linked accounts");
-  }
+  if (!source || !mayLink(principal, source)) throw notFound("This source does not take linked accounts");
   try {
     return c.json({ authorizeUrl: await startLink(getDb(), source, principal.id) });
   } catch (error) {
@@ -95,7 +93,7 @@ router.post("/links/:slug", async (c) => {
 router.get("/links/callback", async (c) => {
   const principal = requireWebUser(c);
   try {
-    const slug = await finishLink(getDb(), principal.id, {
+    const slug = await finishLink(getDb(), principal, {
       code: c.req.query("code"),
       state: c.req.query("state"),
       error: c.req.query("error"),
