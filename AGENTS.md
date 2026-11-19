@@ -37,7 +37,8 @@ apps/server/src/
   scim/            SCIM 2.0 server
   oauth/           OAuth 2.1 server for connected apps (MCP clients)
   mcp/             MCP server and tools (call the REST API in-process)
-  admin/           people: update, block, remove
+  admin/           people as admins see and change them: list, update
+  people/          a person's lifecycle on every path: block, address, removal
   http/            app factory, middleware, errors
   modules/         one file per API area: routes
   worker/          scheduled jobs

@@ -46,7 +46,9 @@ groups under **Settings**.
 ## Directory
 
 The directory lists colleagues for `find_people` and the **People** page,
-and keeps groups and deactivations current between sign-ins.
+and keeps groups and deactivations current between sign-ins. It never
+blocks people in `ADMIN_EMAILS`, and the audit log records whom it blocks
+and unblocks.
 
 ### Keycloak (`DIRECTORY=keycloak`)
 
@@ -89,6 +91,8 @@ would: if the provider still lets them sign in, they come back as a new
 person. So let the identity system deactivate people (`active: false`)
 rather than delete them; Meldgrove IAM's _Deactivate the user_ does that. `active: false` blocks the person, ends their
 sessions and revokes their agents; `true` lifts only the directory's block.
+Deleting a person in `ADMIN_EMAILS` is refused (409). A new `userName`
+keeps admin rights from `ADMIN_EMAILS` only if it is in `ADMIN_EMAILS` too.
 Groups from Keycloak cannot be changed through SCIM.
 
 **Meldgrove IAM:** the guide **Connect Meldgrove IAM** (**Administration →

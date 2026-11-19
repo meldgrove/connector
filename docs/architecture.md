@@ -73,6 +73,8 @@ PostgreSQL holds everything (`apps/server/src/db/schema/`).
   `is_admin`, `blocked_at` and `blocked_by` (`app` or `directory`),
   `sign_in_groups`, `title`, `directory_source` (`scim`, `keycloak`) and
   `directory_id`. The provider's tokens are removed after the sign-in check.
+  Removed people keep their row under a `removed.invalid` address, so the
+  logs still name someone.
 - `groups`, `group_members`: directory groups (`app`, `scim`, `keycloak`)
   with their identity system ID (`external_id`).
 - `sources`: as above; `secret_encrypted` and `oauth_client_encrypted`
@@ -167,6 +169,11 @@ page, and submit it.
 
 ## Directory
 
+- **People** (`people/lifecycle.ts`): every change to a person's
+  lifecycle, whoever makes it: blocking (`setBlocked`; the directory's
+  through `setDirectoryActive`, which writes the audit log), address
+  changes (`changeEmail`: admin rights from `ADMIN_EMAILS` stay with the
+  address), `ADMIN_EMAILS` at sign-in and removal (`removePerson`).
 - **Sign-in** (`auth/sign-in.ts`): stores the groups of every sign-in
   (claim or Keycloak Admin API) and checks `ACCESS_GROUPS`.
 - **Keycloak sync** (`directory/sync.ts`): all users and groups of the

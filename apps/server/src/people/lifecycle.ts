@@ -1,0 +1,199 @@
+import { eq, notLike, or, sql } from "drizzle-orm";
+import { REMOVED_PERSON_NAME } from "@connector/shared/api/users";
+import type { Db, DbOrTx } from "../db/client";
+import {
+  accounts,
+  auditLog,
+  credentials,
+  groupMembers,
+  linkRequests,
+  oauthGrants,
+  oauthRequests,
+  sessions,
+  sourceLinks,
+  users,
+} from "../db/schema";
+import type { UserPrincipal } from "../auth/principal";
+import { isEnvironmentAdmin } from "../auth/bootstrap";
+import { revokeAgentAccess } from "../auth/credentials";
+import { audit } from "../core/audit";
+import { conflict, notFound } from "../http/errors";
+
+/*
+ * Changes to a person's lifecycle, whoever makes them: admins, the Keycloak
+ * directory, SCIM and the sign-in. Blocking, address changes and removal
+ * follow the same rules on every path.
+ */
+
+/**
+ * Removed people keep their row, so that the audit and activity logs still
+ * name someone, under an address that no provider can sign in with
+ * (`.invalid` is reserved) and that keeps emails unique.
+ */
+const REMOVED_EMAIL_DOMAIN = "removed.invalid";
+
+export const isRemoved = (user: { email: string }) => user.email.endsWith(`@${REMOVED_EMAIL_DOMAIN}`);
+
+/** SQL condition: the person is not removed. */
+export const notRemoved = notLike(users.email, `%@${REMOVED_EMAIL_DOMAIN}`);
+
+/** Why nobody in Connector can block, demote or remove an admin from ADMIN_EMAILS. */
+export const ENVIRONMENT_ADMIN_MESSAGE = "This person is an admin through ADMIN_EMAILS; change it there";
+
+/** ADMIN_EMAILS makes this person admin: since the last start, or by their address now. */
+export function isAdminThroughEnvironment(user: { email: string; adminSource: string | null }): boolean {
+  return user.adminSource === "environment" || isEnvironmentAdmin(user.email);
+}
+
+type BlockState = Pick<typeof users.$inferSelect, "id" | "email" | "adminSource" | "blockedAt" | "blockedBy">;
+
+/**
+ * Blocks or unblocks a person; `by` is who acts. Blocking ends their
+ * sessions and revokes their personal tokens and connected apps for good:
+ * unblocking does not bring them back. The directory never blocks admins
+ * from ADMIN_EMAILS and lifts only its own blocks; the app lifts any block.
+ * Returns whether anything changed.
+ */
+export async function setBlocked(
+  tx: DbOrTx,
+  user: BlockState,
+  blocked: boolean,
+  by: "app" | "directory",
+): Promise<boolean> {
+  if (blocked === (user.blockedAt !== null)) return false;
+  if (by === "directory" && (blocked ? isAdminThroughEnvironment(user) : user.blockedBy !== "directory")) {
+    return false;
+  }
+  await tx
+    .update(users)
+    .set({ blockedAt: blocked ? sql`now()` : null, blockedBy: blocked ? by : null, updatedAt: sql`now()` })
+    .where(eq(users.id, user.id));
+  if (blocked) {
+    await tx.delete(sessions).where(eq(sessions.userId, user.id));
+    await revokeAgentAccess(tx, user.id);
+  }
+  return true;
+}
+
+/**
+ * Blocks or unblocks a person on the directory's word (SCIM `active`,
+ * Keycloak `enabled`), and records it in the audit log.
+ */
+export async function setDirectoryActive(tx: DbOrTx, userId: string, active: boolean) {
+  const [user] = await tx.select().from(users).where(eq(users.id, userId));
+  if (!user || !(await setBlocked(tx, user, !active, "directory"))) return;
+  await audit(tx, null, {
+    action: active ? "person.unblocked" : "person.blocked",
+    entityType: "user",
+    entityId: user.id,
+    summary: `The directory ${active ? "unblocked" : "blocked"} ${user.email}`,
+  });
+}
+
+/**
+ * Gives a person a new address (the directory's change). Admin rights from
+ * ADMIN_EMAILS belong to the address: they stay only if the new address is
+ * in ADMIN_EMAILS too. Callers check that nobody else has the address.
+ */
+export async function changeEmail(
+  tx: DbOrTx,
+  user: { id: string; adminSource: string | null },
+  email: string,
+) {
+  await tx
+    .update(users)
+    .set({
+      email,
+      ...(user.adminSource === "environment" && !isEnvironmentAdmin(email)
+        ? { isAdmin: false, adminSource: null }
+        : {}),
+      updatedAt: sql`now()`,
+    })
+    .where(eq(users.id, user.id));
+}
+
+/**
+ * At sign-in, an address in ADMIN_EMAILS makes the person admin and lifts
+ * any block, so ADMIN_EMAILS is always the way back in. Returns whether it
+ * did.
+ */
+export async function restoreEnvironmentAdmin(db: DbOrTx, user: { id: string; email: string }) {
+  if (!isEnvironmentAdmin(user.email)) return false;
+  await db
+    .update(users)
+    .set({
+      isAdmin: true,
+      adminSource: "environment",
+      blockedAt: null,
+      blockedBy: null,
+      updatedAt: sql`now()`,
+    })
+    .where(eq(users.id, user.id));
+  return true;
+}
+
+/** What audit summaries say instead of a removed person's email. */
+const REMOVED_IN_SUMMARIES = "a removed person";
+
+/**
+ * Removes a person while the logs stay readable: their name and email are
+ * replaced; their provider accounts, sessions, tokens, connected apps,
+ * pending app sign-ins, linked accounts and group memberships are deleted;
+ * the audit log loses their email. If they sign in again, they come back as
+ * a new, empty person. Not for people in ADMIN_EMAILS, and not for yourself.
+ * `actor` null: the directory (SCIM) removed them.
+ */
+export async function removePerson(db: Db, actor: UserPrincipal | null, userId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    const [user] = await tx.select().from(users).where(eq(users.id, userId)).for("update");
+    if (!user || isRemoved(user)) throw notFound("No such person");
+    if (actor && user.id === actor.id) throw conflict("You cannot remove yourself", "self_change");
+    if (isAdminThroughEnvironment(user)) throw conflict(ENVIRONMENT_ADMIN_MESSAGE, "environment_admin");
+
+    await tx.delete(sessions).where(eq(sessions.userId, user.id));
+    await tx.delete(accounts).where(eq(accounts.userId, user.id));
+    // Personal tokens and the tokens of connected apps; service tokens have no person.
+    await tx.delete(credentials).where(eq(credentials.userId, user.id));
+    await tx.delete(oauthGrants).where(eq(oauthGrants.userId, user.id));
+    await tx.delete(oauthRequests).where(eq(oauthRequests.userId, user.id));
+    await tx.delete(sourceLinks).where(eq(sourceLinks.userId, user.id));
+    await tx.delete(linkRequests).where(eq(linkRequests.userId, user.id));
+    await tx.delete(groupMembers).where(eq(groupMembers.userId, user.id));
+    await tx
+      .update(users)
+      .set({
+        email: `removed-${user.id}@${REMOVED_EMAIL_DOMAIN}`,
+        name: REMOVED_PERSON_NAME,
+        emailVerified: false,
+        image: null,
+        title: null,
+        isAdmin: false,
+        adminSource: null,
+        // Nothing can sign in as this row; blocked in case a sign-in raced the removal.
+        blockedAt: sql`now()`,
+        blockedBy: "app",
+        signInGroups: [],
+        directorySource: null,
+        directoryId: null,
+        lastSignInAt: null,
+        updatedAt: sql`now()`,
+      })
+      .where(eq(users.id, user.id));
+
+    // The audit log shows the placeholder name as the actor (null would read as "System").
+    await tx
+      .update(auditLog)
+      .set({ actorEmail: REMOVED_PERSON_NAME })
+      .where(or(eq(auditLog.actorUserId, user.id), eq(auditLog.actorEmail, user.email)));
+    await tx
+      .update(auditLog)
+      .set({ summary: sql`replace(${auditLog.summary}, ${user.email}, ${REMOVED_IN_SUMMARIES})` })
+      .where(sql`strpos(${auditLog.summary}, ${user.email}) > 0`);
+    await audit(tx, actor, {
+      action: "person.removed",
+      entityType: "user",
+      entityId: user.id,
+      summary: actor ? "Removed a person" : "The directory removed a person",
+    });
+  });
+}

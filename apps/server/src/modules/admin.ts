@@ -6,7 +6,7 @@ import { auditLog } from "../db/schema";
 import type { AppEnv } from "../http/env";
 import { idParam, jsonBody, queryOf, requireAdmin } from "../http/middleware";
 import { listPeople, updatePerson } from "../admin/service";
-import { removePerson } from "../admin/remove";
+import { removePerson } from "../people/lifecycle";
 import { isoRequired } from "./util";
 
 const router = new Hono<AppEnv>();
