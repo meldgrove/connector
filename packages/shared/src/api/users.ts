@@ -91,7 +91,14 @@ export const directoryStatusSchema = z.object({
   mode: z.enum(["oidc", "keycloak"]),
   syncMinutes: z.number().int().nullable(),
   lastSync: z
-    .object({ at: z.string(), ok: z.boolean(), message: z.string(), people: z.number().int() })
+    .object({
+      at: z.string(),
+      ok: z.boolean(),
+      message: z.string(),
+      people: z.number().int(),
+      /** Keycloak users left out: their email address is unverified or another person's. */
+      skipped: z.number().int(),
+    })
     .nullable(),
   /** The SCIM 2.0 endpoint for IAM and other identity systems. */
   scimUrl: z.string(),

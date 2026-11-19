@@ -350,7 +350,11 @@ export function AdminStatusPage() {
     const live = data.sources.filter((source) => source.enabled && source.delivery === "live");
     setChecking(true);
     Promise.all(live.map((source) => check.mutateAsync(source.id)))
-      .then(() => toast.success(t("checkedSources", { count: live.length })))
+      .then((results) => {
+        const failing = results.filter((result) => !result.ok).length;
+        if (failing > 0) toast.error(t("checkedFailing", { count: live.length, failing }));
+        else toast.success(t("checkedSources", { count: live.length }));
+      })
       .catch((error: unknown) => toast.error(errorMessage(error)))
       .finally(() => setChecking(false));
   };

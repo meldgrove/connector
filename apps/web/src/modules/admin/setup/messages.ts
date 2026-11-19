@@ -74,6 +74,7 @@ export const messages = defineMessages({
     ruleSpacesSave: "Save rule spaces",
     ruleSpacesSaved: "Rule spaces saved",
     noSpaces: "Handbook has no spaces yet.",
+    missingSpace: "Not in Handbook anymore",
 
     // Webhook sources.
     connect: "Connect",
@@ -81,7 +82,8 @@ export const messages = defineMessages({
     sendTitle: "Tell {app} where to send",
     sendText:
       "Add these two lines to {app}'s environment (for example the .env file next to its compose.yaml) and restart {app}.",
-    sendAdmin: "Afterwards, {app}'s Administration page shows the webhook as on.",
+    sendAdmin: "Afterwards, {link} shows the webhook as on.",
+    adminPage: "{app}'s Administration page",
     sendStored:
       "A secret is stored ({hint}). If you don't have it anymore, generate a new one; it replaces the old one.",
     newSecret: "Generate a new secret",

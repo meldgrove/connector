@@ -8,6 +8,8 @@ export const messages = defineMessages({
     checkingSources: "Checking…",
     checkedSources: "Checked {count} sources",
     checkedSources_one: "Checked 1 source",
+    checkedFailing: "Checked {count} sources: {failing} failing",
+    checkedFailing_one: "Checked 1 source: it is failing",
     problemsTitle: "Needs attention",
     allGood: "Everything works",
     allGoodText: "No source, token or sync needs an admin right now.",

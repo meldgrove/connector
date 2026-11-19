@@ -32,7 +32,7 @@ beforeAll(async () => {
           ],
         },
       };
-    if (req.path === "/api/v1/search") return { json: { items: [] } };
+    if (req.path === "/api/v1/search") return { json: { results: [] } };
     return { status: 404, json: {} };
   });
 });
@@ -250,7 +250,7 @@ describe("admin status", () => {
     expect(JSON.stringify(body)).not.toContain("a-long-enough-webhook-secret");
   });
 
-  it("notices sources that fail agents' requests, until a check works again", async () => {
+  it("notices sources that fail agents' requests, until a request works again", async () => {
     const admin = await createUser({ isAdmin: true });
     const rita = await createUser({ name: "Rita" });
     const source = await createSource({
@@ -281,7 +281,8 @@ describe("admin status", () => {
     });
     expect(body.agents.week).toMatchObject({ requests: 1, failed: 1 });
 
-    // The admin fixes the token; the next check clears the problem.
+    // The admin fixes the token. A working check alone does not clear it (it may
+    // test another path); the next request that works does.
     await request("PATCH", `/api/v1/admin/sources/${source.id}`, {
       userId: admin.id,
       body: { secret: { serviceToken: "hb_right" } },
@@ -289,8 +290,10 @@ describe("admin status", () => {
     expect(
       (await request("POST", `/api/v1/admin/sources/${source.id}/check`, { userId: admin.id })).body,
     ).toMatchObject({ ok: true });
+    expect((await status(admin.id)).sources[0]).toMatchObject({ state: "failing" });
+    expect((await request("GET", "/api/v1/search?q=vpn", { token })).status).toBe(200);
     body = await status(admin.id);
-    expect(body.sources[0]).toMatchObject({ state: "ok", requests: { failed: 1 } });
+    expect(body.sources[0]).toMatchObject({ state: "ok", requests: { total: 2, failed: 1 } });
     expect(body.problems.find((problem) => problem.key === `source:${source.id}`)).toBeUndefined();
   });
 
@@ -388,8 +391,13 @@ describe("admin status", () => {
     body = await status(admin.id);
     expect(body.scim.lastError).toMatchObject({
       ok: false,
-      message: "GET /Users failed (HTTP 400): invalidFilter",
+      message: "GET /Users failed (HTTP 400): the filter is not supported",
     });
+    expect(JSON.stringify(body)).not.toContain("rita@example.org");
+    // Unknown paths are not stored as sent.
+    await request("POST", "/scim/v2/rita@example.org", { token, body: {} });
+    body = await status(admin.id);
+    expect(body.scim.lastError).toMatchObject({ message: "POST another path failed (HTTP 404)" });
     expect(JSON.stringify(body)).not.toContain("rita@example.org");
     await request("PATCH", "/scim/v2/Users/0b5a3e5e-3c1f-4d8e-9f3a-000000000000", {
       token,
@@ -399,11 +407,13 @@ describe("admin status", () => {
       },
     });
     body = await status(admin.id);
-    expect(body.scim.lastError).toMatchObject({ message: "PATCH /Users failed (HTTP 404): No such user" });
+    expect(body.scim.lastError).toMatchObject({
+      message: "PATCH /Users failed (HTTP 404): no such person or group",
+    });
     expect(body.scim.lastRequest).toMatchObject({ ok: false });
     expect(body.problems.find((problem) => problem.key === "scim")).toMatchObject({
       area: "scim",
-      detail: "PATCH /Users failed (HTTP 404): No such user",
+      detail: "PATCH /Users failed (HTTP 404): no such person or group",
     });
   });
 

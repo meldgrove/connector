@@ -17,6 +17,8 @@ const lastSyncSchema = z.object({
   ok: z.boolean(),
   message: z.string(),
   people: z.number().int(),
+  /** Keycloak users left out: their email address is unverified or another person's. */
+  skipped: z.number().int().default(0),
 });
 
 export async function directoryStatus(db: DbOrTx): Promise<DirectoryStatus> {
@@ -82,6 +84,7 @@ export async function syncDirectory(
       const realmUsers = (await client.users()).filter((user) => usable(user) && mayUse(user));
 
       const idsByKeycloakId = new Map<string, string>();
+      let skipped = 0;
       for (const user of realmUsers) {
         const email = user.email!.trim().toLowerCase();
         // The person this Keycloak user is: bound by directory ID or by the
@@ -126,6 +129,7 @@ export async function syncDirectory(
               { userId: byEmail.id },
               "a Keycloak user's email address belongs to another person; skipped",
             );
+            skipped += 1;
             continue;
           }
           existing = byEmail;
@@ -279,6 +283,7 @@ export async function syncDirectory(
         ok: true,
         message: `Synced ${realmUsers.length} people and ${realmGroups.length} groups`,
         people: realmUsers.length,
+        skipped,
       });
       return realmUsers.length;
     });
@@ -290,9 +295,13 @@ export async function syncDirectory(
     return { people: count };
   } catch (error) {
     const message = error instanceof Error ? error.message.slice(0, 300) : "Unknown error";
-    await putSetting(db, "directory", { at: new Date().toISOString(), ok: false, message, people: 0 }).catch(
-      () => undefined,
-    );
+    await putSetting(db, "directory", {
+      at: new Date().toISOString(),
+      ok: false,
+      message,
+      people: 0,
+      skipped: 0,
+    }).catch(() => undefined);
     throw error;
   }
 }

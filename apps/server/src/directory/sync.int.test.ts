@@ -6,7 +6,7 @@ import { credentials, groups, users } from "../db/schema";
 import { createGroup, createToken, createUser, request, resetDatabase } from "../test/helpers";
 import type { KeycloakClient, KeycloakUser } from "./keycloak";
 import { ensureEnvironmentAdmins } from "../auth/bootstrap";
-import { syncDirectory } from "./sync";
+import { directoryStatus, syncDirectory } from "./sync";
 
 vi.mock("../auth/resolve", () => import("../test/resolve-mock"));
 
@@ -151,10 +151,12 @@ describe("Keycloak directory sync and identities", () => {
     await syncDirectory(realm([claim], {}));
     const [untouched] = await getDb().select().from(users).where(eq(users.id, root.id));
     expect(untouched).toMatchObject({ directoryId: null, name: root.name });
+    expect((await directoryStatus(getDb())).lastSync).toMatchObject({ ok: true, skipped: 1 });
 
     // Verified, the person is adopted; when their address changes, ADMIN_EMAILS no longer makes them admin.
     claim.emailVerified = true;
     await syncDirectory(realm([claim], {}));
+    expect((await directoryStatus(getDb())).lastSync).toMatchObject({ skipped: 0 });
     claim.email = "mallory@example.org";
     await syncDirectory(realm([claim], {}));
     const [moved] = await getDb().select().from(users).where(eq(users.id, root.id));

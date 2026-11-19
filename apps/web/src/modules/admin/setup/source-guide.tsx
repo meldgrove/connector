@@ -158,15 +158,26 @@ function GuideBody(props: {
   const runCheck = useCheckSource();
   const rotate = useWebhookSecret();
 
-  // While a webhook source waits for its first delivery, the sources are polled.
+  // A new secret in this guide: only deliveries and statuses after it count.
+  const [baseline, setBaseline] = useState<{ delivery: string | null; statusAt: string | null } | null>(null);
+  const fresh = (item: Source | undefined) => {
+    const last = item?.stats?.lastDeliveryAt;
+    return Boolean(last && (!baseline?.delivery || last > baseline.delivery));
+  };
+  const working = (item: Source | undefined) => fresh(item) && item?.status?.ok !== false;
+  // While a webhook source has no working delivery, the sources are polled.
   const sources = useAdminSources({
     poll: (items) => {
-      const waiting = items.find((item) => item.id === sourceId);
-      return webhook && waiting && !waiting.stats?.lastDeliveryAt ? 3000 : false;
+      const item = items.find((candidate) => candidate.id === sourceId);
+      return webhook && item && !working(item) ? 3000 : false;
     },
   });
   const source = sourceId ? sources.data?.items.find((item) => item.id === sourceId) : undefined;
-  const delivered = Boolean(source?.stats?.lastDeliveryAt);
+  const delivered = working(source);
+  const refused = Boolean(source?.status && !source.status.ok && source.status.at !== baseline?.statusAt);
+  const startBaseline = () =>
+    setBaseline({ delivery: source?.stats?.lastDeliveryAt ?? null, statusAt: source?.status?.at ?? null });
+  const [tests, setTests] = useState(0);
 
   const fields = error instanceof ApiError ? (error.fields ?? {}) : {};
   const generalError = error && !(error instanceof ApiError && error.fields) ? error : null;
@@ -204,6 +215,7 @@ function GuideBody(props: {
     if (id) {
       try {
         setCheck(await runCheck.mutateAsync(id));
+        setTests((count) => count + 1);
       } catch (failure) {
         setError(failure);
       }
@@ -217,6 +229,7 @@ function GuideBody(props: {
     const hasSecret = Boolean(source?.secrets.webhookSecret) || secret !== null;
     if (id && !hasSecret) {
       try {
+        startBaseline();
         setSecret((await rotate.mutateAsync(id)).webhookSecret);
       } catch (failure) {
         setError(failure);
@@ -228,7 +241,10 @@ function GuideBody(props: {
   const newSecret = () => {
     if (!sourceId) return;
     rotate.mutate(sourceId, {
-      onSuccess: (created) => setSecret(created.webhookSecret),
+      onSuccess: (created) => {
+        startBaseline();
+        setSecret(created.webhookSecret);
+      },
       onError: (failure) => toast.error(errorMessage(failure)),
     });
   };
@@ -463,19 +479,24 @@ function GuideBody(props: {
               </Button>
             </>
           )}
-          <p className="text-muted-foreground text-sm">{t("sendAdmin", { app })}</p>
+          <p className="text-muted-foreground text-sm">
+            {withLink(
+              t("sendAdmin"),
+              <AppLink href={base ? `${base}/admin` : null}>{t("adminPage", { app })}</AppLink>,
+            )}
+          </p>
         </GuideStep>
         <GuideStep number={next()} title={t("waitTitle")} done={delivered} locked={!source}>
-          {delivered && source ? (
+          {refused && source?.status ? (
+            <Outcome state="failed" title={t("deliveryFailed", { app })}>
+              {source.status.message}
+            </Outcome>
+          ) : delivered && source ? (
             <Outcome state="ok" title={t("received", { app })}>
               {t("receivedText", {
                 message: source.status?.message ?? "",
                 items: ta("items", { count: source.stats?.items ?? 0 }),
               })}
-            </Outcome>
-          ) : source?.status && !source.status.ok ? (
-            <Outcome state="failed" title={t("deliveryFailed", { app })}>
-              {source.status.message}
             </Outcome>
           ) : (
             <Outcome state="waiting" title={t("waiting", { app })}>
@@ -526,14 +547,18 @@ function GuideBody(props: {
       </GuideStep>
       {kind === "handbook" ? (
         <RuleSpacesStep
+          // A new test may have fixed the token: read the spaces again.
+          key={tests}
           number={next()}
-          sourceId={connected ? sourceId : null}
+          sourceId={source ? sourceId : null}
           selected={form.ruleSpaces}
           onSave={async (ruleSpaces) => {
             if (!sourceId) return;
             await update.mutateAsync({ id: sourceId, update: { config: configOf({ ...form, ruleSpaces }) } });
             set("ruleSpaces", ruleSpaces);
             toast.success(t("ruleSpacesSaved"));
+            // A missing rule space fails the check; test again with the new ones.
+            setCheck(await runCheck.mutateAsync(sourceId));
           }}
         />
       ) : null}
@@ -562,6 +587,14 @@ function RuleSpacesStep(props: {
   const [chosen, setChosen] = useState<string[] | null>(null);
   const [saving, setSaving] = useState(false);
   const current = chosen ?? initial;
+  // Rule spaces Handbook no longer has (renamed or removed) can be unticked.
+  const missing = spaces.data
+    ? initial.filter((slug) => !spaces.data.items.some((space) => space.slug === slug))
+    : [];
+  const choices = [
+    ...(spaces.data?.items ?? []),
+    ...missing.map((slug) => ({ slug, name: t("missingSpace") })),
+  ];
   return (
     <GuideStep
       number={props.number}
@@ -574,12 +607,12 @@ function RuleSpacesStep(props: {
         <LoadingState />
       ) : spaces.isError || !spaces.data ? (
         <ErrorState error={spaces.error} onRetry={() => void spaces.refetch()} />
-      ) : spaces.data.items.length === 0 ? (
+      ) : choices.length === 0 ? (
         <p className="text-muted-foreground text-sm">{t("noSpaces")}</p>
       ) : (
         <>
           <div className="grid gap-2 sm:grid-cols-2">
-            {spaces.data.items.map((space) => (
+            {choices.map((space) => (
               <label key={space.slug} className="flex items-center gap-2 text-sm">
                 <Checkbox
                   checked={current.includes(space.slug)}

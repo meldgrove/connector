@@ -233,6 +233,66 @@ describe("setup guides", () => {
     expect(screen.getByTestId("webhook-env")).toHaveTextContent("generated-secret-1234567890");
   });
 
+  it("continues a webhook source: a refused delivery wins over an older one, and a new secret waits for a new delivery", async () => {
+    let stored: Source = {
+      ...logbook,
+      secrets: { webhookSecret: "…7890" },
+      status: {
+        at: "2026-11-19T11:00:00.000Z",
+        ok: false,
+        message: "A delivery had a wrong signature: check that both sides use the same secret",
+      },
+      stats: { items: 3, lastDeliveryAt: "2026-11-19T10:00:00.000Z" },
+    };
+    routeFetch({
+      "GET /api/v1/admin/sources": () => ({ items: [stored] }),
+      [`POST /api/v1/admin/sources/${logbook.id}/webhook-secret`]: { webhookSecret: "new-secret-1234567890" },
+    });
+    renderAt("/admin/setup/logbook", () => (
+      <SetupPage app="logbook" sourceId={logbook.id} onCreated={() => undefined} />
+    ));
+    expect(await screen.findByText("Logbook's delivery was refused")).toBeInTheDocument();
+    expect(screen.queryByText("Logbook delivered")).not.toBeInTheDocument();
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Generate a new secret" }));
+    expect(await screen.findByTestId("webhook-env")).toHaveTextContent(
+      "WEBHOOK_SECRET=new-secret-1234567890",
+    );
+    // The old failure and the old delivery no longer count.
+    expect(screen.getByText("Waiting for Logbook…")).toBeInTheDocument();
+    stored = {
+      ...stored,
+      status: { at: "2026-11-19T12:00:00.000Z", ok: true, message: "Received LB-13" },
+      stats: { items: 4, lastDeliveryAt: "2026-11-19T12:00:00.000Z" },
+    };
+    expect(await screen.findByText("Logbook delivered", undefined, { timeout: 5000 })).toBeInTheDocument();
+  });
+
+  it("waits only for the token made in the guide, not for older ones", async () => {
+    routeFetch({
+      "GET /api/v1/admin/status": statusFixture(),
+      "GET /api/v1/admin/groups": { items: [] },
+      "GET /api/v1/admin/scim-tokens": {
+        items: [
+          {
+            id: "0b5a3e5e-3c1f-4d8e-9f3a-131313131313",
+            name: "Old system",
+            prefix: "cn_scim_old0",
+            lastUsedAt: "2026-11-18T10:00:00.000Z",
+            expiresAt: null,
+            createdAt: "2026-11-01T10:00:00.000Z",
+            createdBy: "ada@example.org",
+          },
+        ],
+      },
+    });
+    renderAt("/admin/setup/iam", () => <SetupPage app="iam" onCreated={() => undefined} />);
+    expect(await screen.findByText(/1 SCIM token exists/)).toBeInTheDocument();
+    expect(screen.queryByText("IAM is connected")).not.toBeInTheDocument();
+    expect(screen.queryByText("Waiting for IAM's first request…")).not.toBeInTheDocument();
+  });
+
   it("connects Handbook: tests the token, shows why it failed, and picks the rule spaces", async () => {
     const source: Source = { ...handbook, config: { ...handbook.config, ruleSpaces: [] }, status: null };
     let stored: Source | null = null;

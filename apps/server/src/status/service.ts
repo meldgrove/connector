@@ -146,18 +146,19 @@ function judgeSource(row: SourceRow, requests: Requests | undefined): SourceVerd
       problem: { severity: "error", title: `${name} is failing`, detail: row.status.message },
     };
   }
-  // Failed requests count when they are newer than the last good check or delivery.
-  const statusAt = msOf(row.status?.at);
-  if (requests && requests.failed > 0 && requests.lastFailedAt > statusAt) {
-    const latestFailed = requests.lastFailedAt > requests.lastOkAt;
-    const detail = `${requests.failed} of ${requests.total} requests of agents and bots failed in the last 24 hours${
-      requests.lastError ? `; the last one: ${requests.lastError}` : ""
-    }.`;
+  // The latest request of an agent or bot failed: failing until a request works
+  // again, whatever a check says (a check may test another path, e.g. the
+  // service token instead of linked accounts). Earlier failures only count.
+  if (requests && requests.failed > 0 && requests.lastFailedAt > requests.lastOkAt) {
     return {
-      state: latestFailed ? "failing" : "ok",
-      problem: latestFailed
-        ? { severity: "error", title: `${name} failed its latest requests`, detail }
-        : { severity: "warning", title: `${name} failed some requests`, detail },
+      state: "failing",
+      problem: {
+        severity: "error",
+        title: `${name} failed its latest requests`,
+        detail: `${requests.failed} of ${requests.total} requests of agents and bots failed in the last 24 hours${
+          requests.lastError ? `; the last one: ${requests.lastError}` : ""
+        }. This clears with the next request that works.`,
+      },
     };
   }
   if (webhook && !row.lastDeliveryAt) {
@@ -274,6 +275,21 @@ export async function adminStatus(db: Db): Promise<AdminStatus> {
     .select({ value: count() })
     .from(users)
     .where(like(users.email, `%@${CONFLICT_EMAIL_DOMAIN}`));
+  const skipped = directory.mode === "keycloak" ? (directory.lastSync?.skipped ?? 0) : 0;
+  if (skipped > 0) {
+    problems.push({
+      key: "directory:skipped",
+      area: "directory",
+      sourceId: null,
+      severity: "warning",
+      title:
+        skipped === 1
+          ? "The Keycloak sync left out 1 person"
+          : `The Keycloak sync left out ${skipped} people`,
+      detail:
+        "Their email address in Keycloak is not verified, or another person in Connector has it. Correct it in Keycloak, or remove the other person; the next sync takes them in.",
+    });
+  }
   if (conflicts && conflicts.value > 0) {
     problems.push({
       key: "people:conflicts",
@@ -391,8 +407,7 @@ export async function adminStatus(db: Db): Promise<AdminStatus> {
     .innerJoin(users, eq(users.id, oauthGrants.userId))
     .where(and(isNull(oauthGrants.revokedAt), isNull(users.blockedAt)))
     .groupBy(oauthClients.name)
-    .orderBy(sql`2 desc`, oauthClients.name)
-    .limit(10);
+    .orderBy(sql`2 desc`, oauthClients.name);
   const [personal] = await db
     .select({ value: count() })
     .from(credentials)

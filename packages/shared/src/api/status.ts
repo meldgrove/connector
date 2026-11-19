@@ -71,7 +71,13 @@ export const adminStatusSchema = z.object({
     mode: z.enum(["oidc", "keycloak"]),
     syncMinutes: z.number().int().nullable(),
     lastSync: z
-      .object({ at: z.string(), ok: z.boolean(), message: z.string(), people: z.number().int() })
+      .object({
+        at: z.string(),
+        ok: z.boolean(),
+        message: z.string(),
+        people: z.number().int(),
+        skipped: z.number().int(),
+      })
       .nullable(),
     people: z.number().int(),
     groups: z.number().int(),

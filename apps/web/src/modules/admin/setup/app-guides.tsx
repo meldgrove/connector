@@ -28,21 +28,20 @@ import { CopyRow, GuideStep, Outcome, withLink } from "./steps";
 /** Tokens made by a guide expire in a year; the status page warns two weeks before. */
 const GUIDE_TOKEN_DAYS = 365;
 
-/** The newest use of the token made in this guide, else of any token of the kind. */
+/**
+ * When the token made in this guide was first used. Only that token counts:
+ * other tokens of the kind may belong to other systems, or have expired.
+ */
 function lastUse(tokens: ServiceToken[], created: TokenCreated | null): string | null {
-  const relevant = created ? tokens.filter((token) => token.id === created.id) : tokens;
-  return relevant.reduce<string | null>(
-    (latest, token) =>
-      token.lastUsedAt && (!latest || token.lastUsedAt > latest) ? token.lastUsedAt : latest,
-    null,
-  );
+  if (!created) return null;
+  return tokens.find((token) => token.id === created.id)?.lastUsedAt ?? null;
 }
 
 /** Creates a token of `kind` (shown once) and waits until it is used. */
 function useGuideToken(kind: TokenKind, name: string) {
   const [created, setCreated] = useState<TokenCreated | null>(null);
   const tokens = useAdminTokens(kind, {
-    poll: (items) => (items.length > 0 && !lastUse(items, created) ? 3000 : false),
+    poll: (items) => (created && !lastUse(items, created) ? 3000 : false),
   });
   const create = useCreateAdminToken(kind);
   const items = tokens.data?.items ?? [];
@@ -76,7 +75,7 @@ function TokenStep(props: {
       number={props.number}
       title={props.title}
       description={props.text}
-      done={token.created !== null || token.items.length > 0}
+      done={token.created !== null}
     >
       {token.created ? (
         <>
@@ -200,7 +199,7 @@ export function IamGuide() {
         number={4}
         title={t("iamWaitTitle")}
         done={Boolean(token.usedAt)}
-        locked={token.items.length === 0}
+        locked={token.created === null}
       >
         {token.usedAt ? (
           <Outcome state="ok" title={t("iamConnected")}>
@@ -304,7 +303,7 @@ export function SupportAgentGuide() {
         number={4}
         title={t("agentWaitTitle")}
         done={Boolean(token.usedAt)}
-        locked={token.items.length === 0}
+        locked={token.created === null}
       >
         {token.usedAt ? (
           <Outcome state="ok" title={t("agentConnected")}>

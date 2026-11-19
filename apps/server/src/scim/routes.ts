@@ -83,26 +83,34 @@ export const SCIM_LAST_ERROR = "scim.last_error";
 
 /**
  * Notes how an identity system's request went, without IDs or personal
- * data: `PATCH /Users`, and for a failed change the plain reason. A missing
- * person on a lookup (404 on GET) is normal and counts as answered.
+ * data: only known resources (`PATCH /Users`) and fixed reasons, because
+ * paths and error details can carry what the client sent. A missing person
+ * on a lookup (404 on GET) is normal and counts as answered.
  */
+const RESOURCES = new Set(["Users", "Groups", "ServiceProviderConfig", "ResourceTypes", "Schemas"]);
+const REASONS: Record<string, string> = {
+  uniqueness: "a person or group with this email address or name exists",
+  invalidValue: "a value is not valid",
+  invalidSyntax: "the request is not valid SCIM",
+  invalidFilter: "the filter is not supported",
+  invalidPath: "changing this attribute is not supported",
+  mutability: "the group comes from Keycloak and cannot change here",
+};
+
 async function recordRequest(c: Context<AppEnv>) {
   const method = c.req.method;
   const status = c.res.status;
-  const resource = c.req.path.split("/scim/v2/")[1]?.split("/")[0] ?? "";
-  const label = `${method} /${resource}`;
+  const segment = c.req.path.split("/scim/v2/")[1]?.split("/")[0] ?? "";
+  const label = `${method} ${RESOURCES.has(segment) ? `/${segment}` : "another path"}`;
   const failed = status >= 500 || (status >= 400 && !(status === 404 && method === "GET"));
   const at = new Date().toISOString();
   let message = label;
   if (failed) {
-    // Lookups can carry filter values (email addresses): only their error type is kept.
+    const known = c.error instanceof ScimError ? c.error : null;
     const reason =
-      c.error instanceof ScimError
-        ? method === "GET"
-          ? (c.error.scimType ?? "")
-          : c.error.detail
-        : "Something went wrong";
-    message = `${label} failed (HTTP ${status})${reason ? `: ${reason}` : ""}`.slice(0, 300);
+      (known?.scimType && REASONS[known.scimType]) ||
+      (known && status === 404 ? "no such person or group" : status >= 500 ? "something went wrong" : "");
+    message = `${label} failed (HTTP ${status})${reason ? `: ${reason}` : ""}`;
   }
   try {
     const db = getDb();
