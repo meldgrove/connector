@@ -4,15 +4,8 @@ import type { Db, DbOrTx } from "../db/client";
 import { escapeLike } from "../db/like";
 import { groupMembers, groups, users } from "../db/schema";
 import { audit } from "../core/audit";
-import {
-  changeEmail,
-  ENVIRONMENT_ADMIN_MESSAGE,
-  isAdminThroughEnvironment,
-  isRemoved,
-  notRemoved,
-  removePerson,
-  setDirectoryActive,
-} from "../people/lifecycle";
+import { AppError } from "../http/errors";
+import { changeEmail, isRemoved, notRemoved, removePerson, setDirectoryActive } from "../people/lifecycle";
 import { ScimFilterError, normalizeAttribute, parseFilter, type ScimCondition } from "./filter";
 
 /*
@@ -394,8 +387,12 @@ export async function patchUser(db: Db, id: string, body: Json): Promise<UserRow
 
 export async function deleteUser(db: Db, id: string): Promise<void> {
   const user = await getUser(db, id);
-  if (isAdminThroughEnvironment(user)) throw new ScimError(409, ENVIRONMENT_ADMIN_MESSAGE);
-  await removePerson(db, null, user.id);
+  // removePerson decides under the row lock; an admin from ADMIN_EMAILS stays.
+  await removePerson(db, null, user.id).catch((error: unknown) => {
+    if (error instanceof AppError && error.code === "environment_admin")
+      throw new ScimError(409, error.message);
+    throw error;
+  });
 }
 
 /** Members given as `[{ value: <user id> }]`; unknown IDs are an error. */

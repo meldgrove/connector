@@ -1,5 +1,6 @@
-import { and, eq, notLike, or, sql } from "drizzle-orm";
+import { and, eq, inArray, not, notLike, or, sql } from "drizzle-orm";
 import { REMOVED_PERSON_NAME } from "@connector/shared/api/users";
+import { config } from "../config";
 import type { Db, DbOrTx } from "../db/client";
 import {
   accounts,
@@ -116,22 +117,14 @@ export async function changeEmail(
  * At sign-in: an address in ADMIN_EMAILS makes the person admin and lifts
  * any block, so ADMIN_EMAILS is always the way back in. Admin rights from
  * ADMIN_EMAILS end when the provider changed the address to one it does not
- * list. Returns whether the person is an admin through ADMIN_EMAILS.
+ * list. Decided by the address the row has now, not as the sign-in read it
+ * (the directory may have changed it meanwhile). Returns whether the person
+ * is an admin through ADMIN_EMAILS.
  */
-export async function environmentAdminAtSignIn(
-  db: DbOrTx,
-  user: { id: string; email: string; adminSource: string | null },
-): Promise<boolean> {
-  if (!isEnvironmentAdmin(user.email)) {
-    if (user.adminSource === "environment") {
-      await db
-        .update(users)
-        .set({ isAdmin: false, adminSource: null, updatedAt: sql`now()` })
-        .where(eq(users.id, user.id));
-    }
-    return false;
-  }
-  await db
+export async function environmentAdminAtSignIn(db: DbOrTx, userId: string): Promise<boolean> {
+  const listed = config().adminEmails;
+  const inList = listed.length > 0 ? inArray(sql`lower(${users.email})`, listed) : sql`false`;
+  const promoted = await db
     .update(users)
     .set({
       isAdmin: true,
@@ -140,8 +133,14 @@ export async function environmentAdminAtSignIn(
       blockedBy: null,
       updatedAt: sql`now()`,
     })
-    .where(eq(users.id, user.id));
-  return true;
+    .where(and(eq(users.id, userId), inList))
+    .returning({ id: users.id });
+  if (promoted.length > 0) return true;
+  await db
+    .update(users)
+    .set({ isAdmin: false, adminSource: null, updatedAt: sql`now()` })
+    .where(and(eq(users.id, userId), eq(users.adminSource, "environment"), not(inList)));
+  return false;
 }
 
 /** What audit summaries say instead of a removed person's email. */

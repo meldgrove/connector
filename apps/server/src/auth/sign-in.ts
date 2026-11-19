@@ -170,7 +170,7 @@ async function mayUseApp(userId: string): Promise<boolean> {
       logger.warn({ err: error, userId }, "could not read the groups at sign-in; the last known groups stay");
     }
   }
-  if (await environmentAdminAtSignIn(db, user)) return true;
+  if (await environmentAdminAtSignIn(db, userId)) return true;
   if (user.blockedAt) {
     logger.info({ userId }, "sign-in refused: blocked");
     return false;
