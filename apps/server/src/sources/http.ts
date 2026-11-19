@@ -139,7 +139,8 @@ async function readLimited(response: Response, app: string, signal: AbortSignal)
     if (signal.aborted) throw new SourceError(`${app} did not answer in time`);
     throw new SourceError(`${app} broke off its answer`);
   }
-  return Buffer.concat(chunks).toString("utf8");
+  // TextDecoder drops a byte order mark, as JSON.parse needs.
+  return new TextDecoder().decode(Buffer.concat(chunks));
 }
 
 /**

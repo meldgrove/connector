@@ -137,7 +137,8 @@ describe("source requests", () => {
           if (!response.destroyed) response.once("drain", send);
         };
         send();
-      } else response.write("{"); // Headers, then nothing more.
+      } else if (_.url === "/bom") response.end('\uFEFF{"items":[]}');
+      else response.write("{"); // Headers, then nothing more.
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -152,6 +153,9 @@ describe("source requests", () => {
         app: "Handbook",
       }).catch((caught: unknown) => caught);
       expect(huge).toMatchObject({ kind: "failed", message: "Handbook sent too much data" });
+      // A byte order mark before the JSON is fine.
+      const marked = await sourceFetch(`${base}/bom`, { signal: AbortSignal.timeout(5000), app: "Handbook" });
+      expect(marked).toMatchObject({ ok: true, json: true, data: { items: [] } });
     } finally {
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));
