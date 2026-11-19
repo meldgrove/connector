@@ -444,7 +444,14 @@ export async function unlink(db: Db, source: SourceRow, userId: string): Promise
       );
     }
   } catch (error) {
-    logger.info({ err: error, sourceId: source.id }, "could not revoke a linked account at the source");
+    // A source's failure in Connector's own words: its answer could echo the token.
+    if (error instanceof SourceError) {
+      logger.info(
+        { sourceId: source.id, reason: error.diagnostic },
+        "could not revoke a linked account at the source",
+      );
+    } else
+      logger.warn({ err: error, sourceId: source.id }, "could not revoke a linked account at the source");
   }
   return true;
 }

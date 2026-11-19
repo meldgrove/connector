@@ -1,3 +1,5 @@
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { startFakeApp, type FakeAnswer, type FakeApp } from "../test/fake-app";
@@ -122,6 +124,38 @@ describe("source requests", () => {
       kind: "failed",
       message: `Could not reach Handbook at ${address}: ECONNREFUSED`,
     });
+  });
+
+  it("ends at the signal or the size limit while the body still arrives", async () => {
+    const server = createServer((_, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      if (_.url === "/huge") {
+        // No Content-Length: the limit applies as the body arrives.
+        const chunk = "x".repeat(1024 * 1024);
+        const send = () => {
+          while (!response.destroyed && response.write(chunk));
+          if (!response.destroyed) response.once("drain", send);
+        };
+        send();
+      } else response.write("{"); // Headers, then nothing more.
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    try {
+      const stalled = await sourceFetch(`${base}/stalled`, {
+        signal: AbortSignal.timeout(200),
+        app: "Handbook",
+      }).catch((caught: unknown) => caught);
+      expect(stalled).toMatchObject({ kind: "failed", message: "Handbook did not answer in time" });
+      const huge = await sourceFetch(`${base}/huge`, {
+        signal: AbortSignal.timeout(5000),
+        app: "Handbook",
+      }).catch((caught: unknown) => caught);
+      expect(huge).toMatchObject({ kind: "failed", message: "Handbook sent too much data" });
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+    }
   });
 
   it("sends forms and hands back any status", async () => {

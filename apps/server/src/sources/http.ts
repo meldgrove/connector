@@ -61,7 +61,7 @@ export async function sourceFetch(
   if (response.status >= 300 && response.status < 400) {
     throw new SourceError(`${options.app} redirected the request; check the address`);
   }
-  const text = await readLimited(response, options.app);
+  const text = await readLimited(response, options.app, options.signal);
   try {
     return { status: response.status, ok: response.ok, data: text ? JSON.parse(text) : null, json: true };
   } catch {
@@ -112,19 +112,41 @@ export async function sourceRequest<T extends z.ZodType>(
   return parsed.data;
 }
 
-async function readLimited(response: Response, app: string): Promise<string> {
-  const length = Number(response.headers.get("content-length") ?? "0");
-  if (length > MAX_RESPONSE_BYTES) throw new SourceError(`${app} sent too much data`);
-  const buffer = await response.arrayBuffer();
-  if (buffer.byteLength > MAX_RESPONSE_BYTES) throw new SourceError(`${app} sent too much data`);
-  return new TextDecoder().decode(buffer);
+/** The body, read as it arrives and given up beyond the size limit. */
+async function readLimited(response: Response, app: string, signal: AbortSignal): Promise<string> {
+  const tooMuch = () => new SourceError(`${app} sent too much data`);
+  if (Number(response.headers.get("content-length") ?? "0") > MAX_RESPONSE_BYTES) {
+    await response.body?.cancel().catch(() => undefined);
+    throw tooMuch();
+  }
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_RESPONSE_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        throw tooMuch();
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof SourceError) throw error;
+    if (signal.aborted) throw new SourceError(`${app} did not answer in time`);
+    throw new SourceError(`${app} broke off its answer`);
+  }
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 /**
  * Why a request failed, as a code (ECONNREFUSED, ENOTFOUND, …): never the
  * error's message, which can quote request headers.
  */
-export function fetchErrorCode(error: unknown): string {
+function fetchErrorCode(error: unknown): string {
   const cause = (error as { cause?: { code?: unknown } } | null)?.cause;
   return typeof cause?.code === "string" ? cause.code : "connection failed";
 }

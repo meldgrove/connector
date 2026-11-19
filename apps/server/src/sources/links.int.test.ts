@@ -438,6 +438,8 @@ describe("linked accounts", () => {
         .returning();
       const searched = await request("GET", "/api/v1/search?q=vpn", { token: await createToken(rita.id) });
       expect(searched.body.sources).toMatchObject([{ ok: false, error: "handbook did not answer in time" }]);
+      // It got as far as the refresh, which holds the link's row lock.
+      expect(stuck.requests.map((req) => req.path)).toContain("/oauth/token");
       // The refresh ended with the request: its row lock is free again.
       await new Promise((resolve) => setTimeout(resolve, 500));
       const lockFree = await getDb()
