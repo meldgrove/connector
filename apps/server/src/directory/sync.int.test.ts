@@ -138,6 +138,19 @@ describe("Keycloak directory sync with ACCESS_GROUPS", () => {
 describe("Keycloak directory sync and identities", () => {
   beforeEach(resetDatabase);
 
+  it("counts only the groups it synced: a name an app or SCIM group has stays theirs", async () => {
+    await createGroup("/staff");
+    await syncDirectory(
+      realm([], {
+        staff: { id: "g-staff", path: "/staff", members: [] },
+        it: { id: "g-it", path: "/it", members: [] },
+      }),
+    );
+    expect((await directoryStatus(getDb())).lastSync).toMatchObject({
+      message: "Synced 0 people and 1 groups",
+    });
+  });
+
   it("adopts a person by email only when Keycloak verified it, and admin rights stay with the address", async () => {
     const root = await createUser({ email: "root@example.org", isAdmin: true });
     await getDb().update(users).set({ adminSource: "environment" }).where(eq(users.id, root.id));

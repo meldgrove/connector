@@ -314,10 +314,17 @@ export function adapterContext(
   return { db, source: row, config: row.config, secret: secretOf(row), principal, signal };
 }
 
+/**
+ * A status `{ at, ok, message }` stamped with the database's time, like
+ * deliveries and webhook secrets, so the setup guide compares one clock.
+ */
+const statusNow = (ok: boolean, message: string) =>
+  sql`jsonb_build_object('at', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), 'ok', ${ok}::boolean, 'message', ${message.slice(0, 300)}::text)`;
+
 export async function recordStatus(db: Db, id: string, ok: boolean, message: string) {
   await db
     .update(sources)
-    .set({ status: { at: new Date().toISOString(), ok, message: message.slice(0, 300) } })
+    .set({ status: statusNow(ok, message) })
     .where(eq(sources.id, id));
 }
 
@@ -408,6 +415,6 @@ export async function sourceSummaries(db: Db, principal: Principal): Promise<Sou
 export async function recordDelivery(db: Db, id: string, message: string) {
   await db
     .update(sources)
-    .set({ lastDeliveryAt: sql`now()`, status: { at: new Date().toISOString(), ok: true, message } })
+    .set({ lastDeliveryAt: sql`now()`, status: statusNow(true, message) })
     .where(eq(sources.id, id));
 }

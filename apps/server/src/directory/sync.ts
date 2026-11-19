@@ -281,7 +281,7 @@ export async function syncDirectory(
       await putSetting(tx, "directory", {
         at: new Date().toISOString(),
         ok: true,
-        message: `Synced ${realmUsers.length - skipped} people and ${realmGroups.length} groups`,
+        message: `Synced ${realmUsers.length - skipped} people and ${keptGroupIds.length} groups`,
         people: realmUsers.length - skipped,
         skipped,
       });

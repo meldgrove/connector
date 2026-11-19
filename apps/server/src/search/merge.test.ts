@@ -44,5 +44,9 @@ describe("diagnosticOf", () => {
       "Could not reach Handbook at http://127.0.0.1:9: connection failed",
     );
     expect(diagnosticOf("Handbook did not answer in time")).toBe("Handbook did not answer in time");
+    expect(diagnosticOf("The sign-in server refused: invalid_grant")).toBe("The sign-in server refused");
+    expect(diagnosticOf("The source refused Connector's registration: bad redirect for rita")).toBe(
+      "The source refused Connector's registration",
+    );
   });
 });

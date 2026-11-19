@@ -159,10 +159,12 @@ export type ActivityInput = {
  */
 /**
  * What the activity log keeps of a source's failure: Connector's own words,
- * without the error text the app sent (it can echo the request of a linked
- * account), e.g. "Handbook refused the credentials".
+ * without the text the app or its sign-in server sent (it can echo the
+ * request of a linked account), e.g. "Handbook refused the credentials".
+ * These are the messages that carry such text (sources/http.ts, links.ts).
  */
-const APP_TEXT = /^(.*?(?:refused the credentials|does not allow this|answered HTTP \d+)): .*$/s;
+const APP_TEXT =
+  /^(.*?(?:refused the credentials|does not allow this|answered HTTP \d+|The sign-in server refused|refused Connector's registration)): .*$/s;
 export const diagnosticOf = (error: string) => error.replace(APP_TEXT, "$1").slice(0, 300);
 
 export async function logActivity(db: DbOrTx, principal: Principal, entry: ActivityInput) {
