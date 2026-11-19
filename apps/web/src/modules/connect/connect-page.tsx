@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 import { createRoute, Link, type AnyRoute } from "@tanstack/react-router";
 import { ShieldCheck } from "lucide-react";
-import { CopyButton } from "@/components/copy-button";
+import { CopyButton } from "@meldgrove/ui/copy-button";
 import { Page, PageHeader } from "@/components/layout/page";
-import { ErrorState, LoadingState } from "@/components/states";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ErrorState, LoadingState } from "@meldgrove/ui/states";
+import { Alert, AlertDescription, AlertTitle } from "@meldgrove/ui/alert";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@meldgrove/ui/card";
 import { defineMessages, useT } from "@/i18n";
 import { appRoute } from "@/routes/app";
 import { useConnectInfo } from "@/modules/settings/api";

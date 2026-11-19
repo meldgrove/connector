@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import type { SetupApp } from "@connector/shared/api/status";
 import { SOURCE_KIND_INFO, type SourceKind } from "@connector/shared/sources";
 import { Page, PageHeader } from "@/components/layout/page";
-import { Button } from "@/components/ui/button";
+import { Button } from "@meldgrove/ui/button";
 import { useT } from "@/i18n";
 import { IamGuide, SupportAgentGuide } from "./app-guides";
 import { messages } from "./messages";

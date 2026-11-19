@@ -7,11 +7,11 @@ import {
   type SourceOutcome,
 } from "@connector/shared/api/search";
 import { AUTHORITY_LABELS, type Authority } from "@connector/shared/sources";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
 import { defineMessages, useT } from "@/i18n";
 import { useFormatter } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 
 const messages = defineMessages({
   en: {
