@@ -81,7 +81,7 @@ router.get("/admin/sources/:id/spaces", async (c) => {
 
 router.post("/admin/sources/:id/webhook-secret", async (c) => {
   const actor = requireAdmin(c);
-  return c.json({ webhookSecret: await rotateWebhookSecret(getDb(), actor, idParam(c)) });
+  return c.json(await rotateWebhookSecret(getDb(), actor, idParam(c)));
 });
 
 router.get("/links", async (c) => {

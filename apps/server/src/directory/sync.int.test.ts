@@ -151,7 +151,12 @@ describe("Keycloak directory sync and identities", () => {
     await syncDirectory(realm([claim], {}));
     const [untouched] = await getDb().select().from(users).where(eq(users.id, root.id));
     expect(untouched).toMatchObject({ directoryId: null, name: root.name });
-    expect((await directoryStatus(getDb())).lastSync).toMatchObject({ ok: true, skipped: 1 });
+    expect((await directoryStatus(getDb())).lastSync).toMatchObject({
+      ok: true,
+      people: 0,
+      skipped: 1,
+      message: "Synced 0 people and 0 groups",
+    });
 
     // Verified, the person is adopted; when their address changes, ADMIN_EMAILS no longer makes them admin.
     claim.emailVerified = true;

@@ -5,6 +5,7 @@ import type {
   SourceCheck,
   SourceCreate,
   SourceUpdate,
+  WebhookSecretCreated,
 } from "@connector/shared/api/sources";
 import type { AdminStatus } from "@connector/shared/api/status";
 import type { ServiceToken, TokenCreate, TokenCreated } from "@connector/shared/api/tokens";
@@ -105,7 +106,7 @@ export function useCheckSource() {
 export function useWebhookSecret() {
   const refresh = useRefreshSources();
   return useMutation({
-    mutationFn: (id: string) => api.post<{ webhookSecret: string }>(`/admin/sources/${id}/webhook-secret`),
+    mutationFn: (id: string) => api.post<WebhookSecretCreated>(`/admin/sources/${id}/webhook-secret`),
     onSettled: refresh,
   });
 }

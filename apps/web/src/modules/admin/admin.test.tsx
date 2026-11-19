@@ -193,7 +193,7 @@ describe("setup guides", () => {
       },
       [`POST /api/v1/admin/sources/${logbook.id}/webhook-secret`]: () => {
         stored = { ...logbook, secrets: { webhookSecret: "…7890" } };
-        return { webhookSecret: "generated-secret-1234567890" };
+        return { webhookSecret: "generated-secret-1234567890", createdAt: "2026-11-19T09:59:00.000Z" };
       },
     });
     renderAt("/admin/setup/logbook", () => <SetupPage app="logbook" onCreated={created} />);
@@ -246,7 +246,10 @@ describe("setup guides", () => {
     };
     routeFetch({
       "GET /api/v1/admin/sources": () => ({ items: [stored] }),
-      [`POST /api/v1/admin/sources/${logbook.id}/webhook-secret`]: { webhookSecret: "new-secret-1234567890" },
+      [`POST /api/v1/admin/sources/${logbook.id}/webhook-secret`]: {
+        webhookSecret: "new-secret-1234567890",
+        createdAt: "2026-11-19T11:30:00.000Z",
+      },
     });
     renderAt("/admin/setup/logbook", () => (
       <SetupPage app="logbook" sourceId={logbook.id} onCreated={() => undefined} />
@@ -338,6 +341,9 @@ describe("setup guides", () => {
     expect(await screen.findByText("Reached Handbook: 2 spaces")).toBeInTheDocument();
     expect(patched[0]).toMatchObject({ secret: { serviceToken: "hb_right" } });
     await user.click(await screen.findByRole("checkbox", { name: /Purpose and rules/ }));
+    // An unsaved new address does not travel with the rule spaces.
+    await user.clear(screen.getByLabelText("Address"));
+    await user.type(screen.getByLabelText("Address"), "https://moved.example.org");
     await user.click(screen.getByRole("button", { name: "Save rule spaces" }));
     await waitFor(() =>
       expect(patched[1]).toEqual({

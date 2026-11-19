@@ -50,7 +50,10 @@ type Requests = {
   lastError: string | null;
 };
 
-/** Requests of agents and bots per source slug in the last 24 hours (the activity log). */
+/**
+ * Requests of agents and bots per source slug in the last 24 hours (the
+ * activity log), since the current source with that slug was created.
+ */
 async function requestsBySlug(db: Db): Promise<Map<string, Requests>> {
   const { rows } = await db.execute<{
     slug: string;
@@ -68,7 +71,9 @@ async function requestsBySlug(db: Db): Promise<Map<string, Requests>> {
              as last_failed_ms,
            (array_agg(s->>'error' order by a.created_at desc) filter (where (s->>'ok')::boolean is false))[1]
              as last_error
-    from ${activity} a cross join lateral jsonb_array_elements(a.sources) s
+    from ${activity} a
+      cross join lateral jsonb_array_elements(a.sources) s
+      join ${sources} src on src.slug = s->>'slug' and a.created_at >= src.created_at
     where a.created_at > now() - interval '24 hours'
     group by 1`);
   return new Map(

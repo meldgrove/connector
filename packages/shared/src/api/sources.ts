@@ -184,7 +184,12 @@ export const handbookSpaceListSchema = z.object({
 export type HandbookSpaceList = z.infer<typeof handbookSpaceListSchema>;
 
 /** A generated webhook secret, shown once; paste it into the app's WEBHOOK_SECRET. */
-export const webhookSecretCreatedSchema = z.object({ webhookSecret: z.string() });
+export const webhookSecretCreatedSchema = z.object({
+  webhookSecret: z.string(),
+  /** When it took effect: later deliveries were checked against it. */
+  createdAt: z.string(),
+});
+export type WebhookSecretCreated = z.infer<typeof webhookSecretCreatedSchema>;
 
 /** A person's linked account at a source (Handbook, through its OAuth server). */
 export const linkSchema = z.object({

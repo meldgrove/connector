@@ -274,8 +274,16 @@ export async function deleteSource(db: Db, actor: UserPrincipal, id: string): Pr
   });
 }
 
-/** A new random webhook secret for a webhook source, stored and shown once. */
-export async function rotateWebhookSecret(db: Db, actor: UserPrincipal, id: string): Promise<string> {
+/**
+ * A new random webhook secret for a webhook source, stored and shown once,
+ * with the database time after it took effect: deliveries recorded later
+ * were checked against the new secret (setup guide).
+ */
+export async function rotateWebhookSecret(
+  db: Db,
+  actor: UserPrincipal,
+  id: string,
+): Promise<{ webhookSecret: string; createdAt: string }> {
   const row = await getSource(db, id);
   if (!isWebhookKind(row.kind)) throw conflict("Only webhook sources have a webhook secret");
   const webhookSecret = randomBytes(32).toString("base64url");
@@ -291,7 +299,10 @@ export async function rotateWebhookSecret(db: Db, actor: UserPrincipal, id: stri
       summary: `New webhook secret for the source “${row.name}”`,
     });
   });
-  return webhookSecret;
+  const {
+    rows: [after],
+  } = await db.execute<{ ms: number }>(sql`select (extract(epoch from now()) * 1000)::float8 as ms`);
+  return { webhookSecret, createdAt: new Date(after!.ms).toISOString() };
 }
 
 export function adapterContext(

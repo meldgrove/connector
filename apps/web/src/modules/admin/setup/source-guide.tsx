@@ -25,15 +25,7 @@ import {
   useWebhookSecret,
 } from "../api";
 import { messages as adminMessages } from "../messages";
-import {
-  configOf,
-  createBody,
-  emptyForm,
-  formOf,
-  slugFrom,
-  updateBody,
-  type SourceForm,
-} from "../source-dialog";
+import { createBody, emptyForm, formOf, slugFrom, updateBody, type SourceForm } from "../source-dialog";
 import { messages } from "./messages";
 import { AppLink, baseUrlOf, CopyRow, EnvBlock, GuideStep, Outcome, withLink } from "./steps";
 
@@ -158,11 +150,12 @@ function GuideBody(props: {
   const runCheck = useCheckSource();
   const rotate = useWebhookSecret();
 
-  // A new secret in this guide: only deliveries and statuses after it count.
-  const [baseline, setBaseline] = useState<{ delivery: string | null; statusAt: string | null } | null>(null);
+  // After a secret made in this guide, only deliveries and statuses recorded
+  // after it took effect (server time) count.
+  const [since, setSince] = useState<string | null>(null);
   const fresh = (item: Source | undefined) => {
     const last = item?.stats?.lastDeliveryAt;
-    return Boolean(last && (!baseline?.delivery || last > baseline.delivery));
+    return Boolean(last && (!since || last > since));
   };
   const working = (item: Source | undefined) => fresh(item) && item?.status?.ok !== false;
   // While a webhook source has no working delivery, the sources are polled.
@@ -174,9 +167,7 @@ function GuideBody(props: {
   });
   const source = sourceId ? sources.data?.items.find((item) => item.id === sourceId) : undefined;
   const delivered = working(source);
-  const refused = Boolean(source?.status && !source.status.ok && source.status.at !== baseline?.statusAt);
-  const startBaseline = () =>
-    setBaseline({ delivery: source?.stats?.lastDeliveryAt ?? null, statusAt: source?.status?.at ?? null });
+  const refused = Boolean(source?.status && !source.status.ok && (!since || source.status.at > since));
   const [tests, setTests] = useState(0);
 
   const fields = error instanceof ApiError ? (error.fields ?? {}) : {};
@@ -229,8 +220,9 @@ function GuideBody(props: {
     const hasSecret = Boolean(source?.secrets.webhookSecret) || secret !== null;
     if (id && !hasSecret) {
       try {
-        startBaseline();
-        setSecret((await rotate.mutateAsync(id)).webhookSecret);
+        const created = await rotate.mutateAsync(id);
+        setSince(created.createdAt);
+        setSecret(created.webhookSecret);
       } catch (failure) {
         setError(failure);
       }
@@ -242,7 +234,7 @@ function GuideBody(props: {
     if (!sourceId) return;
     rotate.mutate(sourceId, {
       onSuccess: (created) => {
-        startBaseline();
+        setSince(created.createdAt);
         setSecret(created.webhookSecret);
       },
       onError: (failure) => toast.error(errorMessage(failure)),
@@ -553,9 +545,10 @@ function GuideBody(props: {
           sourceId={source ? sourceId : null}
           selected={form.ruleSpaces}
           onSave={async (ruleSpaces) => {
-            if (!sourceId) return;
-            await update.mutateAsync({ id: sourceId, update: { config: configOf({ ...form, ruleSpaces }) } });
-            set("ruleSpaces", ruleSpaces);
+            if (!sourceId || !source) return;
+            // Only the rule spaces change: unsaved edits above (e.g. the address) stay unsaved.
+            await update.mutateAsync({ id: sourceId, update: { config: { ...source.config, ruleSpaces } } });
+            set("ruleSpaces", ruleSpaces.join(", "));
             toast.success(t("ruleSpacesSaved"));
             // A missing rule space fails the check; test again with the new ones.
             setCheck(await runCheck.mutateAsync(sourceId));
@@ -576,7 +569,7 @@ function RuleSpacesStep(props: {
   number: number;
   sourceId: string | null;
   selected: string;
-  onSave: (ruleSpaces: string) => Promise<void>;
+  onSave: (ruleSpaces: string[]) => Promise<void>;
 }) {
   const t = useT(messages);
   const spaces = useHandbookSpaces(props.sourceId);
@@ -635,7 +628,7 @@ function RuleSpacesStep(props: {
             onClick={() => {
               setSaving(true);
               props
-                .onSave(current.join(", "))
+                .onSave(current)
                 .then(() => setChosen(null))
                 .catch((failure: unknown) => toast.error(errorMessage(failure)))
                 .finally(() => setSaving(false));

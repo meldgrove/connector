@@ -157,6 +157,14 @@ export type ActivityInput = {
  * Records what an agent, token or bot asked (oversight). Searches in the
  * web app are not recorded. ACTIVITY_LOG_DAYS=0 records nothing.
  */
+/**
+ * What the activity log keeps of a source's failure: Connector's own words,
+ * without the error text the app sent (it can echo the request of a linked
+ * account), e.g. "Handbook refused the credentials".
+ */
+const APP_TEXT = /^(.*?(?:refused the credentials|does not allow this|answered HTTP \d+)): .*$/s;
+export const diagnosticOf = (error: string) => error.replace(APP_TEXT, "$1").slice(0, 300);
+
 export async function logActivity(db: DbOrTx, principal: Principal, entry: ActivityInput) {
   if (config().ACTIVITY_LOG_DAYS === 0) return;
   if (principal.kind === "user" && principal.channel === "web") return;
@@ -175,7 +183,7 @@ export async function logActivity(db: DbOrTx, principal: Principal, entry: Activ
         slug: source.slug,
         ok: source.ok,
         count: source.count,
-        ...(source.error ? { error: source.error.slice(0, 300) } : {}),
+        ...(source.error ? { error: diagnosticOf(source.error) } : {}),
       })),
       ms: entry.ms,
     })

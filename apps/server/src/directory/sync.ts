@@ -281,11 +281,11 @@ export async function syncDirectory(
       await putSetting(tx, "directory", {
         at: new Date().toISOString(),
         ok: true,
-        message: `Synced ${realmUsers.length} people and ${realmGroups.length} groups`,
-        people: realmUsers.length,
+        message: `Synced ${realmUsers.length - skipped} people and ${realmGroups.length} groups`,
+        people: realmUsers.length - skipped,
         skipped,
       });
-      return realmUsers.length;
+      return realmUsers.length - skipped;
     });
     if (count === null) {
       logger.info("directory sync skipped: another process is syncing");

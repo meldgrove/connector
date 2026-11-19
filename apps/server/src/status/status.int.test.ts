@@ -262,7 +262,8 @@ describe("admin status", () => {
     expect((await request("GET", "/api/v1/search?q=vpn", { token })).status).toBe(200);
     const [logged] = await getDb().select().from(activity);
     expect(logged!.sources).toEqual([
-      { slug: "handbook", ok: false, count: 0, error: "Handbook refused the credentials: Unknown token" },
+      // Connector's words only: the app's own error text is not kept.
+      { slug: "handbook", ok: false, count: 0, error: "Handbook refused the credentials" },
     ]);
 
     let body = await status(admin.id);
@@ -271,7 +272,7 @@ describe("admin status", () => {
       requests: {
         total: 1,
         failed: 1,
-        lastError: { message: "Handbook refused the credentials: Unknown token" },
+        lastError: { message: "Handbook refused the credentials" },
       },
     });
     expect(body.problems[0]).toMatchObject({
@@ -295,6 +296,19 @@ describe("admin status", () => {
     body = await status(admin.id);
     expect(body.sources[0]).toMatchObject({ state: "ok", requests: { total: 2, failed: 1 } });
     expect(body.problems.find((problem) => problem.key === `source:${source.id}`)).toBeUndefined();
+
+    // A new source with the same short name starts without the old one's requests.
+    await getDb()
+      .update(activity)
+      .set({ sources: [{ slug: "handbook", ok: false, count: 0 }] });
+    await request("DELETE", `/api/v1/admin/sources/${source.id}`, { userId: admin.id });
+    await createSource({
+      kind: "handbook",
+      config: { baseUrl: handbook.url, ruleSpaces: [], allowLinking: false },
+      secret: { serviceToken: "hb_right" },
+    });
+    body = await status(admin.id);
+    expect(body.sources[0]).toMatchObject({ state: "unchecked", requests: { total: 0, failed: 0 } });
   });
 
   it("the worker checks live sources and leaves webhook sources alone", async () => {
