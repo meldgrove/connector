@@ -91,7 +91,14 @@ export const directoryStatusSchema = z.object({
   mode: z.enum(["oidc", "keycloak"]),
   syncMinutes: z.number().int().nullable(),
   lastSync: z
-    .object({ at: z.string(), ok: z.boolean(), message: z.string(), people: z.number().int() })
+    .object({
+      at: z.string(),
+      ok: z.boolean(),
+      message: z.string(),
+      people: z.number().int(),
+      /** Keycloak users left out: their email address is unverified or another person's. */
+      skipped: z.number().int(),
+    })
     .nullable(),
   /** The SCIM 2.0 endpoint for IAM and other identity systems. */
   scimUrl: z.string(),
@@ -124,7 +131,10 @@ export const activityEntrySchema = z.object({
   action: z.string(),
   query: z.string().nullable(),
   results: z.number().int(),
-  sources: z.array(z.object({ slug: z.string(), ok: z.boolean(), count: z.number().int() })),
+  /** How each source answered; `error` says why it failed. */
+  sources: z.array(
+    z.object({ slug: z.string(), ok: z.boolean(), count: z.number().int(), error: z.string().optional() }),
+  ),
   ms: z.number().int(),
 });
 export type ActivityEntry = z.infer<typeof activityEntrySchema>;

@@ -70,7 +70,9 @@ const recentSchema = z.object({
   ),
 });
 
-const spacesSchema = z.object({ items: z.array(z.object({ slug: z.string() })) });
+const spacesSchema = z.object({
+  items: z.array(z.object({ slug: z.string(), name: z.string().optional() })),
+});
 
 export type HandbookConfig = z.infer<typeof handbookConfigSchema>;
 
@@ -101,6 +103,20 @@ function authorityOf(config: HandbookConfig, space: string) {
 /** Handbook marks matched words with \u0002 and \u0003; Connector uses the same marks. */
 function snippetOf(text: string): string {
   return text.length > MAX_SNIPPET ? `${text.slice(0, MAX_SNIPPET - 1)}…` : text;
+}
+
+/** Handbook's spaces, read with the service token: admins pick the rule spaces from them. */
+export async function handbookSpaces(context: AdapterContext): Promise<{ slug: string; name: string }[]> {
+  const config = handbookConfig(context);
+  const token = context.secret.serviceToken;
+  if (typeof token !== "string" || token === "") throw new SourceError("Add a service token from Handbook");
+  const spaces = await sourceRequest(`${config.baseUrl}/api/v1/spaces`, {
+    token,
+    signal: context.signal,
+    schema: spacesSchema,
+    app: APP,
+  });
+  return spaces.items.map((space) => ({ slug: space.slug, name: space.name ?? space.slug }));
 }
 
 export const handbookAdapter: Adapter = {

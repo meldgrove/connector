@@ -6,6 +6,7 @@ import { resolveScimToken } from "../auth/credentials";
 import { bearerToken } from "../auth/resolve";
 import type { AppEnv } from "../http/env";
 import { logger } from "../logger";
+import { putSetting } from "../core/settings";
 import {
   createGroup,
   createUser,
@@ -76,6 +77,50 @@ function paging(c: Context<AppEnv>) {
   };
 }
 
+/** Settings keys: the last SCIM request, and the last one that failed (status page). */
+export const SCIM_LAST_REQUEST = "scim.last";
+export const SCIM_LAST_ERROR = "scim.last_error";
+
+/**
+ * Notes how an identity system's request went, without IDs or personal
+ * data: only known resources (`PATCH /Users`) and fixed reasons, because
+ * paths and error details can carry what the client sent. A missing person
+ * on a lookup (404 on GET) is normal and counts as answered.
+ */
+const RESOURCES = new Set(["Users", "Groups", "ServiceProviderConfig", "ResourceTypes", "Schemas"]);
+const REASONS: Record<string, string> = {
+  uniqueness: "a person or group with this email address or name exists",
+  invalidValue: "a value is not valid",
+  invalidSyntax: "the request is not valid SCIM",
+  invalidFilter: "the filter is not supported",
+  invalidPath: "changing this attribute is not supported",
+  mutability: "the group comes from Keycloak and cannot change here",
+};
+
+async function recordRequest(c: Context<AppEnv>) {
+  const method = c.req.method;
+  const status = c.res.status;
+  const segment = c.req.path.split("/scim/v2/")[1]?.split("/")[0] ?? "";
+  const label = `${method} ${RESOURCES.has(segment) ? `/${segment}` : "another path"}`;
+  const failed = status >= 500 || (status >= 400 && !(status === 404 && method === "GET"));
+  const at = new Date().toISOString();
+  let message = label;
+  if (failed) {
+    const known = c.error instanceof ScimError ? c.error : null;
+    const reason =
+      (known?.scimType && REASONS[known.scimType]) ||
+      (known && status === 404 ? "no such person or group" : status >= 500 ? "something went wrong" : "");
+    message = `${label} failed (HTTP ${status})${reason ? `: ${reason}` : ""}`;
+  }
+  try {
+    const db = getDb();
+    await putSetting(db, SCIM_LAST_REQUEST, { at, ok: !failed, message });
+    if (failed) await putSetting(db, SCIM_LAST_ERROR, { at, ok: false, message });
+  } catch (error) {
+    logger.warn({ err: error }, "could not record a SCIM request");
+  }
+}
+
 /** `attributes=displayName` or `excludedAttributes=members`: groups without their members. */
 function withoutMembers(c: Context<AppEnv>): boolean {
   const attributes = (c.req.query("attributes") ?? "").toLowerCase();
@@ -111,6 +156,7 @@ export function scimRoutes() {
       );
     }
     await next();
+    await recordRequest(c);
   });
   scim.onError((error, c) => {
     if (error instanceof ScimError) return scimError(c, error);

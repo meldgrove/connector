@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Network, Plus, RefreshCw, UsersRound } from "lucide-react";
 import type { Group } from "@connector/shared/api/users";
@@ -102,6 +103,11 @@ function ScimCard() {
       <CardHeader>
         <CardTitle>{t("scimTitle")}</CardTitle>
         <CardDescription>{t("scimDescription")}</CardDescription>
+        <CardAction>
+          <Button asChild size="sm" variant="outline">
+            <Link to="/admin/setup/iam">{t("setUpIam")}</Link>
+          </Button>
+        </CardAction>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-1.5">

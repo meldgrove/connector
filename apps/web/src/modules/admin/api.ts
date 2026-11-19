@@ -1,5 +1,13 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Source, SourceCheck, SourceCreate, SourceUpdate } from "@connector/shared/api/sources";
+import type {
+  HandbookSpaceList,
+  Source,
+  SourceCheck,
+  SourceCreate,
+  SourceUpdate,
+  WebhookSecretCreated,
+} from "@connector/shared/api/sources";
+import type { AdminStatus } from "@connector/shared/api/status";
 import type { ServiceToken, TokenCreate, TokenCreated } from "@connector/shared/api/tokens";
 import type {
   ActivityEntry,
@@ -11,7 +19,9 @@ import type {
 import { api } from "@/lib/api";
 
 export const adminKeys = {
+  status: ["admin", "status"] as const,
   sources: ["admin", "sources"] as const,
+  spaces: (id: string) => ["admin", "sources", id, "spaces"] as const,
   people: (q: string) => ["admin", "people", q] as const,
   tokens: (kind: TokenKind) => ["admin", `${kind}-tokens`] as const,
   groups: ["admin", "groups"] as const,
@@ -20,20 +30,43 @@ export const adminKeys = {
     ["admin", "activity", { q, limit, offset }] as const,
 };
 
-/** Refreshes the admin list and what people see of sources. */
+/** Refreshes the admin list, the status and what people see of sources. */
 function useRefreshSources() {
   const client = useQueryClient();
   return () =>
     Promise.all([
       client.invalidateQueries({ queryKey: adminKeys.sources }),
+      client.invalidateQueries({ queryKey: adminKeys.status }),
       client.invalidateQueries({ queryKey: ["sources"] }),
     ]);
 }
 
-export function useAdminSources() {
+/** The status page; `poll` refreshes it while it is open. */
+export function useAdminStatus(options: { poll?: number } = {}) {
+  return useQuery({
+    queryKey: adminKeys.status,
+    queryFn: ({ signal }) => api.get<AdminStatus>("/admin/status", undefined, signal),
+    refetchInterval: options.poll,
+  });
+}
+
+/** Handbook's spaces, read with the source's service token. */
+export function useHandbookSpaces(id: string | null) {
+  return useQuery({
+    queryKey: adminKeys.spaces(id ?? ""),
+    queryFn: ({ signal }) => api.get<HandbookSpaceList>(`/admin/sources/${id}/spaces`, undefined, signal),
+    enabled: id !== null,
+    retry: false,
+  });
+}
+
+/** The sources as admins see them; `poll` refreshes them while it returns an interval (e.g. waiting for a delivery). */
+export function useAdminSources(options: { poll?: (items: Source[]) => number | false } = {}) {
+  const { poll } = options;
   return useQuery({
     queryKey: adminKeys.sources,
     queryFn: ({ signal }) => api.get<{ items: Source[] }>("/admin/sources", undefined, signal),
+    refetchInterval: poll ? (query) => poll(query.state.data?.items ?? []) : undefined,
   });
 }
 
@@ -73,7 +106,7 @@ export function useCheckSource() {
 export function useWebhookSecret() {
   const refresh = useRefreshSources();
   return useMutation({
-    mutationFn: (id: string) => api.post<{ webhookSecret: string }>(`/admin/sources/${id}/webhook-secret`),
+    mutationFn: (id: string) => api.post<WebhookSecretCreated>(`/admin/sources/${id}/webhook-secret`),
     onSettled: refresh,
   });
 }
@@ -111,10 +144,16 @@ export function useRemovePerson() {
 /** Service tokens (bots) and SCIM tokens (identity systems) work the same way. */
 export type TokenKind = "service" | "scim";
 
-export function useAdminTokens(kind: TokenKind) {
+/** Service or SCIM tokens; `poll` refreshes them while it returns an interval (e.g. waiting for a first use). */
+export function useAdminTokens(
+  kind: TokenKind,
+  options: { poll?: (items: ServiceToken[]) => number | false } = {},
+) {
+  const { poll } = options;
   return useQuery({
     queryKey: adminKeys.tokens(kind),
     queryFn: ({ signal }) => api.get<{ items: ServiceToken[] }>(`/admin/${kind}-tokens`, undefined, signal),
+    refetchInterval: poll ? (query) => poll(query.state.data?.items ?? []) : undefined,
   });
 }
 
@@ -122,7 +161,11 @@ export function useCreateAdminToken(kind: TokenKind) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (input: TokenCreate) => api.post<TokenCreated>(`/admin/${kind}-tokens`, input),
-    onSettled: () => client.invalidateQueries({ queryKey: adminKeys.tokens(kind) }),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: adminKeys.tokens(kind) }),
+        client.invalidateQueries({ queryKey: adminKeys.status }),
+      ]),
   });
 }
 
@@ -130,7 +173,11 @@ export function useRevokeAdminToken(kind: TokenKind) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => api.delete(`/admin/${kind}-tokens/${id}`),
-    onSettled: () => client.invalidateQueries({ queryKey: adminKeys.tokens(kind) }),
+    onSettled: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: adminKeys.tokens(kind) }),
+        client.invalidateQueries({ queryKey: adminKeys.status }),
+      ]),
   });
 }
 
@@ -173,6 +220,7 @@ export function useSyncDirectory() {
       Promise.all([
         client.invalidateQueries({ queryKey: adminKeys.groups }),
         client.invalidateQueries({ queryKey: ["admin", "people"] }),
+        client.invalidateQueries({ queryKey: adminKeys.status }),
       ]),
   });
 }

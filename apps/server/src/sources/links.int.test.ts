@@ -355,6 +355,22 @@ describe("linked accounts", () => {
     }
   });
 
+  it("name failed sign-in metadata in fixed words, never by the address the source gave", async () => {
+    const missing = await startFakeApp(() => ({ status: 404, json: {} }));
+    try {
+      await createSource({
+        kind: "handbook",
+        slug: "missing",
+        config: { baseUrl: missing.url, ruleSpaces: [], allowLinking: true },
+      });
+      const rita = await createUser();
+      const refused = await request("POST", "/api/v1/links/missing", { userId: rita.id });
+      expect(refused.body.error.message).toBe("The source's sign-in metadata answered HTTP 404");
+    } finally {
+      await missing.close();
+    }
+  });
+
   it("refuse links where the source does not allow them", async () => {
     await createSource({
       kind: "handbook",

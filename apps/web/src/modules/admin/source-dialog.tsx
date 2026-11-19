@@ -6,7 +6,7 @@ import {
   type SourceCreate,
   type SourceUpdate,
 } from "@connector/shared/api/sources";
-import { SOURCE_KINDS, SOURCE_KIND_INFO, type SourceKind } from "@connector/shared/sources";
+import { SOURCE_KIND_INFO, type SourceKind } from "@connector/shared/sources";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -20,7 +20,6 @@ import {
 } from "@/components/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -110,7 +109,7 @@ export function slugFrom(name: string): string {
     .replace(/-+$/, "");
 }
 
-function configOf(form: SourceForm): Record<string, unknown> {
+export function configOf(form: SourceForm): Record<string, unknown> {
   const baseUrl = form.baseUrl.trim();
   switch (form.kind) {
     case "handbook":
@@ -215,27 +214,25 @@ function SwitchField(props: {
   );
 }
 
-/** Connect a source (no `source`) or edit one. */
+/** Edits a source; new sources are connected with the setup guides. */
 export function SourceDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  source?: Source;
+  source: Source;
   pending: boolean;
   error: unknown;
   onSubmit: (form: SourceForm) => void;
 }) {
   const t = useT(messages);
   const tc = useT(common);
-  const editing = props.source !== undefined;
-  const [form, setForm] = useState<SourceForm>(() => (props.source ? formOf(props.source) : emptyForm()));
-  const [slugTouched, setSlugTouched] = useState(editing);
+  const [form, setForm] = useState<SourceForm>(() => formOf(props.source));
   const set = <K extends keyof SourceForm>(key: K, value: SourceForm[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
   const fields = props.error instanceof ApiError ? (props.error.fields ?? {}) : {};
   const generalError =
     props.error && !(props.error instanceof ApiError && props.error.fields) ? props.error : null;
   const hint = (key: string, fallback: string) =>
-    props.source?.secrets[key] ? t("stored", { hint: props.source.secrets[key] }) : fallback;
+    props.source.secrets[key] ? t("stored", { hint: props.source.secrets[key] }) : fallback;
   const submit = (event: FormEvent) => {
     event.preventDefault();
     props.onSubmit(form);
@@ -245,28 +242,9 @@ export function SourceDialog(props: {
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
-            <DialogTitle>
-              {editing ? t("editTitle", { name: props.source!.name }) : t("createTitle")}
-            </DialogTitle>
+            <DialogTitle>{t("editTitle", { name: props.source.name })}</DialogTitle>
             <DialogDescription>{SOURCE_KIND_INFO[form.kind].holds}</DialogDescription>
           </DialogHeader>
-          {!editing ? (
-            <Field>
-              <FieldLabel htmlFor="source-kind">{t("kind")}</FieldLabel>
-              <Select value={form.kind} onValueChange={(value) => set("kind", value as SourceKind)}>
-                <SelectTrigger id="source-kind" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {SOURCE_KINDS.map((kind) => (
-                    <SelectItem key={kind} value={kind}>
-                      {SOURCE_KIND_INFO[kind].label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-          ) : null}
           <TextField
             id="source-name"
             label={t("name")}
@@ -274,10 +252,7 @@ export function SourceDialog(props: {
             value={form.name}
             required
             error={fields.name}
-            onChange={(value) => {
-              set("name", value);
-              if (!slugTouched) set("slug", slugFrom(value));
-            }}
+            onChange={(value) => set("name", value)}
           />
           <TextField
             id="source-slug"
@@ -285,12 +260,8 @@ export function SourceDialog(props: {
             hint={t("slugHint")}
             value={form.slug}
             required
-            disabled={editing}
-            error={fields.slug}
-            onChange={(value) => {
-              setSlugTouched(true);
-              set("slug", value);
-            }}
+            disabled
+            onChange={() => undefined}
           />
           <Field data-invalid={Boolean(fields.description)}>
             <FieldLabel htmlFor="source-description">{t("description")}</FieldLabel>
@@ -440,7 +411,7 @@ export function SourceDialog(props: {
               disabled={props.pending || !form.name.trim() || !form.slug.trim() || !form.baseUrl.trim()}
             >
               {props.pending ? <Spinner /> : null}
-              {editing ? t("save") : t("connect")}
+              {t("save")}
             </Button>
           </DialogFooter>
         </form>

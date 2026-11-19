@@ -177,8 +177,19 @@ export const sourceSummaryListSchema = z.object({ items: z.array(sourceSummarySc
 export const sourceCheckSchema = z.object({ ok: z.boolean(), message: z.string() });
 export type SourceCheck = z.infer<typeof sourceCheckSchema>;
 
+/** Handbook's spaces, read with the service token: admins pick the rule spaces from them. */
+export const handbookSpaceListSchema = z.object({
+  items: z.array(z.object({ slug: z.string(), name: z.string() })),
+});
+export type HandbookSpaceList = z.infer<typeof handbookSpaceListSchema>;
+
 /** A generated webhook secret, shown once; paste it into the app's WEBHOOK_SECRET. */
-export const webhookSecretCreatedSchema = z.object({ webhookSecret: z.string() });
+export const webhookSecretCreatedSchema = z.object({
+  webhookSecret: z.string(),
+  /** When it took effect: later deliveries were checked against it. */
+  createdAt: z.string(),
+});
+export type WebhookSecretCreated = z.infer<typeof webhookSecretCreatedSchema>;
 
 /** A person's linked account at a source (Handbook, through its OAuth server). */
 export const linkSchema = z.object({

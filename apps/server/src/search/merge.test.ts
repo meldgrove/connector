@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SearchResult } from "@connector/shared/api/search";
 import type { Authority } from "@connector/shared/sources";
-import { mergeResults } from "./federate";
+import { diagnosticOf, mergeResults } from "./federate";
 
 const result = (id: string, authority: Authority): SearchResult => ({
   id,
@@ -28,5 +28,25 @@ describe("mergeResults", () => {
       "old",
     ]);
     expect(mergeResults([handbook, logbook], 3)).toHaveLength(3);
+  });
+});
+
+describe("diagnosticOf", () => {
+  it("keeps Connector's words and drops the app's error text", () => {
+    expect(diagnosticOf("Handbook refused the credentials: Unknown token")).toBe(
+      "Handbook refused the credentials",
+    );
+    expect(diagnosticOf("CRM does not allow this: no access to rita@example.org")).toBe(
+      "CRM does not allow this",
+    );
+    expect(diagnosticOf("Handbook answered HTTP 500: boom")).toBe("Handbook answered HTTP 500");
+    expect(diagnosticOf("Could not reach Handbook at http://127.0.0.1:9: connection failed")).toBe(
+      "Could not reach Handbook at http://127.0.0.1:9: connection failed",
+    );
+    expect(diagnosticOf("Handbook did not answer in time")).toBe("Handbook did not answer in time");
+    expect(diagnosticOf("The sign-in server refused: invalid_grant")).toBe("The sign-in server refused");
+    expect(diagnosticOf("The source refused Connector's registration: bad redirect for rita")).toBe(
+      "The source refused Connector's registration",
+    );
   });
 });

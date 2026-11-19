@@ -11,6 +11,7 @@ import {
   Unplug,
   UsersRound,
   Contact,
+  Gauge,
 } from "lucide-react";
 import { defineMessages } from "@/i18n";
 
@@ -24,6 +25,7 @@ export const navMessages = defineMessages({
     agents: "AI agents",
     connect: "Connect an agent",
     admin: "Administration",
+    status: "Status",
     sources: "Sources",
     adminPeople: "People",
     directory: "Directory",
@@ -58,6 +60,7 @@ export const NAVIGATION: NavGroup[] = [
     key: "admin",
     adminOnly: true,
     items: [
+      { key: "status", to: "/admin", icon: Gauge },
       { key: "sources", to: "/admin/sources", icon: Unplug },
       { key: "adminPeople", to: "/admin/people", icon: UsersRound },
       { key: "directory", to: "/admin/directory", icon: Network },

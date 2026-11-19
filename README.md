@@ -28,6 +28,9 @@ orders results by which source wins when they disagree.
   the Keycloak Admin API for people and groups, SCIM 2.0 for identity
   systems such as Meldgrove IAM, OAuth 2.1 and MCP for agents, OAuth 2.1
   with dynamic client registration for linked accounts.
+- **Easy to run.** A setup guide per app, and a status page that shows
+  what needs an admin: a failing source, a token about to expire, a
+  stopped sync.
 - **Oversight.** An activity log of what agents and bots asked and which
   sources answered, an audit log of admin changes, error reports to Sentry
   without personal data.
@@ -62,5 +65,5 @@ npm run dev
 ```
 
 Open http://localhost:5173 and sign in as `ada@example.org` (password
-`connector-dev`), an admin. Connect a source under **Administration →
-Sources**.
+`connector-dev`), an admin. Connect a source with its guide under
+**Administration → Status**.

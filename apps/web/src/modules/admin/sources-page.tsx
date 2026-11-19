@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Bot, CircleCheck, CircleHelp, CircleX, Plus, Unplug, Webhook } from "lucide-react";
+import { Bot, ChevronDown, CircleCheck, CircleHelp, CircleX, Plus, Unplug, Webhook } from "lucide-react";
+import { SOURCE_KINDS, SOURCE_KIND_INFO } from "@connector/shared/sources";
 import type { Source } from "@connector/shared/api/sources";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { CopyButton } from "@/components/copy-button";
@@ -18,6 +20,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useT } from "@/i18n";
@@ -25,16 +33,9 @@ import { common } from "@/i18n/common";
 import { errorMessage } from "@/lib/api";
 import { useFormatter } from "@/lib/format";
 import { kindLabel } from "@/modules/home/home-page";
-import {
-  useAdminSources,
-  useCheckSource,
-  useCreateSource,
-  useDeleteSource,
-  useUpdateSource,
-  useWebhookSecret,
-} from "./api";
+import { useAdminSources, useCheckSource, useDeleteSource, useUpdateSource, useWebhookSecret } from "./api";
 import { messages } from "./messages";
-import { createBody, SourceDialog, updateBody } from "./source-dialog";
+import { SourceDialog, updateBody } from "./source-dialog";
 
 const isWebhook = (source: Source) => source.kind === "logbook" || source.kind === "library";
 
@@ -141,15 +142,36 @@ function WebhookDialog(props: { source: Source | null; onClose: () => void }) {
   );
 }
 
+/** "Connect a source": a setup guide per app. */
+function ConnectMenu() {
+  const t = useT(messages);
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button>
+          <Plus />
+          {t("newSource")}
+          <ChevronDown />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {SOURCE_KINDS.map((kind) => (
+          <DropdownMenuItem key={kind} asChild>
+            <Link to={`/admin/setup/${kind}`}>{SOURCE_KIND_INFO[kind].label}</Link>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function AdminSourcesPage() {
   const t = useT(messages);
   const tc = useT(common);
   const sources = useAdminSources();
-  const create = useCreateSource();
   const update = useUpdateSource();
   const remove = useDeleteSource();
   const check = useCheckSource();
-  const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Source | null>(null);
   const [deleting, setDeleting] = useState<Source | null>(null);
   const [webhook, setWebhook] = useState<Source | null>(null);
@@ -169,27 +191,18 @@ export function AdminSourcesPage() {
 
   return (
     <Page>
-      <PageHeader
-        title={t("sourcesTitle")}
-        description={t("sourcesDescription")}
-        actions={
-          <Button
-            onClick={() => {
-              create.reset();
-              setCreating(true);
-            }}
-          >
-            <Plus />
-            {t("newSource")}
-          </Button>
-        }
-      />
+      <PageHeader title={t("sourcesTitle")} description={t("sourcesDescription")} actions={<ConnectMenu />} />
       {sources.isLoading ? (
         <LoadingState />
       ) : sources.isError || !sources.data ? (
         <ErrorState error={sources.error} onRetry={() => void sources.refetch()} />
       ) : sources.data.items.length === 0 ? (
-        <EmptyState icon={<Unplug />} title={t("noSources")} description={t("noSourcesHint")} />
+        <EmptyState
+          icon={<Unplug />}
+          title={t("noSources")}
+          description={t("noSourcesHint")}
+          action={<ConnectMenu />}
+        />
       ) : (
         <Card className="py-0">
           <Table>
@@ -278,24 +291,6 @@ export function AdminSourcesPage() {
           </Table>
         </Card>
       )}
-      {creating ? (
-        <SourceDialog
-          open
-          onOpenChange={setCreating}
-          pending={create.isPending}
-          error={create.error}
-          onSubmit={(form) =>
-            create.mutate(createBody(form), {
-              onSuccess: (created) => {
-                setCreating(false);
-                toast.success(t("created"));
-                if (isWebhook(created)) setWebhook(created);
-                else runCheck(created);
-              },
-            })
-          }
-        />
-      ) : null}
       {editing ? (
         <SourceDialog
           open
