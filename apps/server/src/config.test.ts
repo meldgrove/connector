@@ -40,6 +40,14 @@ describe("config", () => {
     ).toThrow(/OAUTH_ALLOW_PRIVATE_CLIENT_URLS/);
   });
 
+  it("reads UPDATER_TOKEN: unset when blank, only visible ASCII characters", () => {
+    expect(configWith({ UPDATER_TOKEN: "" })().UPDATER_TOKEN).toBeUndefined();
+    expect(configWith({ UPDATER_TOKEN: "dG9rZW4tdG9rZW4tdG9rZW4=" })().UPDATER_TOKEN).toBe(
+      "dG9rZW4tdG9rZW4tdG9rZW4=",
+    );
+    expect(configWith({ UPDATER_TOKEN: "two words" })).toThrow(/UPDATER_TOKEN/);
+  });
+
   it("reads UPDATER_URL: the Compose service by default, empty switches it off", () => {
     delete process.env.UPDATER_URL;
     expect(configWith({})().UPDATER_URL).toBe("http://updater:8080");

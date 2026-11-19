@@ -35,7 +35,8 @@ export function updaterStatus(overrides: Partial<UpdaterStatus> = {}): UpdaterSt
 }
 
 type Reply = { status?: number; body?: unknown; delayMs?: number };
-export type UpdaterCallRecord = { method: string; path: string; body: unknown };
+/** `authorization` is the header as sent; undefined without one. */
+export type UpdaterCallRecord = { method: string; path: string; body: unknown; authorization?: string };
 
 /**
  * An updater API on a free local port for tests. Each request gets the reply
@@ -51,6 +52,7 @@ export async function startFakeUpdater() {
       method: request.method ?? "",
       path: request.url ?? "",
       body: text ? JSON.parse(text) : null,
+      authorization: request.headers.authorization,
     };
     calls.push(call);
     const reply = respond(call);
