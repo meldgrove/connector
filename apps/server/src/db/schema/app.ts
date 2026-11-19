@@ -235,7 +235,11 @@ export const activity = pgTable(
     action: text("action").notNull(),
     query: text("query"),
     results: integer("results").notNull().default(0),
-    sources: jsonb("sources").$type<{ slug: string; ok: boolean; count: number }[]>().notNull().default([]),
+    /** How each source answered; `error` is the source's short failure message. */
+    sources: jsonb("sources")
+      .$type<{ slug: string; ok: boolean; count: number; error?: string }[]>()
+      .notNull()
+      .default([]),
     ms: integer("ms").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -262,6 +266,8 @@ export const credentials = pgTable(
     createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    /** Service and SCIM tokens: the last time something sent it after it was revoked or expired. */
+    lastRejectedAt: timestamp("last_rejected_at", { withTimezone: true }),
     revokedAt: timestamp("revoked_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

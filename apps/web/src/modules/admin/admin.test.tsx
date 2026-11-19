@@ -11,9 +11,12 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Source } from "@connector/shared/api/sources";
+import type { AdminStatus } from "@connector/shared/api/status";
 import type { Me, Person } from "@connector/shared/api/users";
 import { AdminPeoplePage } from "./people-page";
+import { SetupPage } from "./setup/setup-page";
 import { AdminSourcesPage } from "./sources-page";
+import { AdminStatusPage } from "./status-page";
 import { createBody, emptyForm, formOf, slugFrom, updateBody } from "./source-dialog";
 
 const me: Me = {
@@ -144,47 +147,60 @@ describe("source forms", () => {
   });
 });
 
+const logbook: Source = {
+  ...handbook,
+  id: "0b5a3e5e-3c1f-4d8e-9f3a-999999999999",
+  slug: "logbook",
+  kind: "logbook",
+  name: "Logbook",
+  accessGroups: [],
+  serviceAccess: false,
+  config: { baseUrl: "https://logbook.example.org" },
+  secrets: {},
+  webhookUrl: "https://connector.example.org/hooks/logbook",
+  status: null,
+  stats: { items: 0, lastDeliveryAt: null },
+};
+
 describe("admin sources", () => {
-  it("lists sources with access and status, and connects a new one", async () => {
-    let posted: unknown;
-    const logbook: Source = {
-      ...handbook,
-      id: "0b5a3e5e-3c1f-4d8e-9f3a-999999999999",
-      slug: "logbook",
-      kind: "logbook",
-      name: "Logbook",
-      accessGroups: [],
-      serviceAccess: false,
-      config: { baseUrl: "https://logbook.example.org" },
-      secrets: {},
-      webhookUrl: "https://connector.example.org/hooks/logbook",
-      status: null,
-      stats: { items: 0, lastDeliveryAt: null },
-    };
-    routeFetch({
-      "GET /api/v1/admin/sources": { items: [handbook] },
-      "POST /api/v1/admin/sources": (init?: RequestInit) => {
-        posted = JSON.parse(String(init?.body));
-        return logbook;
-      },
-      [`POST /api/v1/admin/sources/${logbook.id}/webhook-secret`]: {
-        webhookSecret: "generated-secret-1234567890",
-      },
-    });
+  it("lists sources with access and status, and offers a setup guide per app", async () => {
+    routeFetch({ "GET /api/v1/admin/sources": { items: [handbook] } });
     renderAt("/admin/sources", AdminSourcesPage);
     const row = (await screen.findByText("Reached Handbook: 4 spaces")).closest("tr")!;
     expect(within(row).getByText("Members of /staff")).toBeInTheDocument();
     expect(within(row).getByText("Bots too")).toBeInTheDocument();
-
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Connect a source" }));
-    const dialog = await screen.findByRole("dialog");
-    await user.click(within(dialog).getByRole("combobox"));
-    await user.click(await screen.findByRole("option", { name: "Meldgrove Logbook" }));
-    await user.type(within(dialog).getByLabelText("Name"), "Logbook");
-    expect(within(dialog).getByLabelText("Short name")).toHaveValue("logbook");
-    await user.type(within(dialog).getByLabelText("Address of the app"), "https://logbook.example.org");
-    await user.click(within(dialog).getByRole("button", { name: "Connect" }));
+    expect(await screen.findByRole("menuitem", { name: "Meldgrove Logbook" })).toHaveAttribute(
+      "href",
+      "/admin/setup/logbook",
+    );
+    expect(screen.getAllByRole("menuitem")).toHaveLength(4);
+  });
+});
+
+describe("setup guides", () => {
+  it("connects Logbook: the source, its webhook values once, and the first delivery", async () => {
+    let stored: Source | null = null;
+    let posted: unknown;
+    const created = vi.fn();
+    routeFetch({
+      "GET /api/v1/admin/sources": () => ({ items: stored ? [stored] : [handbook] }),
+      "POST /api/v1/admin/sources": (init?: RequestInit) => {
+        posted = JSON.parse(String(init?.body));
+        stored = logbook;
+        return logbook;
+      },
+      [`POST /api/v1/admin/sources/${logbook.id}/webhook-secret`]: () => {
+        stored = { ...logbook, secrets: { webhookSecret: "…7890" } };
+        return { webhookSecret: "generated-secret-1234567890" };
+      },
+    });
+    renderAt("/admin/setup/logbook", () => <SetupPage app="logbook" onCreated={created} />);
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Address"), "https://logbook.example.org");
+    await user.type(screen.getByLabelText("Groups"), "/staff");
+    await user.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() =>
       expect(posted).toEqual({
         kind: "logbook",
@@ -192,18 +208,216 @@ describe("admin sources", () => {
         name: "Logbook",
         description: null,
         enabled: true,
-        accessGroups: [],
+        accessGroups: ["/staff"],
         serviceAccess: false,
         config: { baseUrl: "https://logbook.example.org" },
         secret: {},
       }),
     );
-    // A webhook source opens its webhook setup: the URL, and a secret shown once.
-    expect(await screen.findByTestId("webhook-url")).toHaveTextContent(
-      "https://connector.example.org/hooks/logbook",
+    expect(created).toHaveBeenCalledWith(logbook.id);
+    expect(await screen.findByTestId("webhook-env")).toHaveTextContent(
+      "WEBHOOK_URL=https://connector.example.org/hooks/logbook WEBHOOK_SECRET=generated-secret-1234567890",
     );
-    await user.click(screen.getByRole("button", { name: "Generate webhook secret" }));
-    expect(await screen.findByTestId("webhook-secret")).toHaveTextContent("generated-secret-1234567890");
+    expect(screen.getByText("Waiting for Logbook…")).toBeInTheDocument();
+
+    // The first delivery arrives; the guide notices on its next look.
+    stored = {
+      ...logbook,
+      secrets: { webhookSecret: "…7890" },
+      status: { at: "2026-11-19T10:00:00.000Z", ok: true, message: "Received LB-12" },
+      stats: { items: 1, lastDeliveryAt: "2026-11-19T10:00:00.000Z" },
+    };
+    expect(await screen.findByText("Logbook delivered", undefined, { timeout: 5000 })).toBeInTheDocument();
+    expect(screen.getByText("Received LB-12 · 1 item")).toBeInTheDocument();
+    // The secret stays on screen until the admin leaves.
+    expect(screen.getByTestId("webhook-env")).toHaveTextContent("generated-secret-1234567890");
+  });
+
+  it("connects Handbook: tests the token, shows why it failed, and picks the rule spaces", async () => {
+    const source: Source = { ...handbook, config: { ...handbook.config, ruleSpaces: [] }, status: null };
+    let stored: Source | null = null;
+    let checks = 0;
+    let patched: unknown[] = [];
+    routeFetch({
+      "GET /api/v1/admin/sources": () => ({ items: stored ? [stored] : [] }),
+      "POST /api/v1/admin/sources": () => {
+        stored = source;
+        return source;
+      },
+      [`PATCH /api/v1/admin/sources/${source.id}`]: (init?: RequestInit) => {
+        patched = [...patched, JSON.parse(String(init?.body))];
+        return stored;
+      },
+      [`POST /api/v1/admin/sources/${source.id}/check`]: () => {
+        checks += 1;
+        return checks === 1
+          ? { ok: false, message: "Handbook refused the credentials: Unknown token" }
+          : { ok: true, message: "Reached Handbook: 2 spaces" };
+      },
+      [`GET /api/v1/admin/sources/${source.id}/spaces`]: {
+        items: [
+          { slug: "purpose", name: "Purpose and rules" },
+          { slug: "it", name: "IT" },
+        ],
+      },
+    });
+    renderAt("/admin/setup/handbook", () => <SetupPage app="handbook" onCreated={() => undefined} />);
+    const user = userEvent.setup();
+    await user.type(await screen.findByLabelText("Address"), "https://handbook.example.org");
+    expect(screen.getByRole("link", { name: "Administration → Service tokens" })).toHaveAttribute(
+      "href",
+      "https://handbook.example.org/admin/service-tokens",
+    );
+    await user.type(screen.getByLabelText("Service token"), "hb_wrong");
+    await user.click(screen.getByRole("button", { name: "Connect and test" }));
+    expect(await screen.findByText("Handbook did not accept the connection")).toBeInTheDocument();
+    expect(screen.getByText("Handbook refused the credentials: Unknown token")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Service token"), "hb_right");
+    await user.click(screen.getByRole("button", { name: "Save and test" }));
+    expect(await screen.findByText("Reached Handbook: 2 spaces")).toBeInTheDocument();
+    expect(patched[0]).toMatchObject({ secret: { serviceToken: "hb_right" } });
+    await user.click(await screen.findByRole("checkbox", { name: /Purpose and rules/ }));
+    await user.click(screen.getByRole("button", { name: "Save rule spaces" }));
+    await waitFor(() =>
+      expect(patched[1]).toEqual({
+        config: { baseUrl: "https://handbook.example.org", ruleSpaces: ["purpose"], allowLinking: true },
+      }),
+    );
+  });
+
+  it("connects IAM: a SCIM token shown once, the values for IAM, and its first request", async () => {
+    const token = {
+      id: "0b5a3e5e-3c1f-4d8e-9f3a-121212121212",
+      name: "Meldgrove IAM",
+      prefix: "cn_scim_abcd",
+      lastUsedAt: null as string | null,
+      expiresAt: "2027-11-19T10:00:00.000Z",
+      createdAt: "2026-11-19T10:00:00.000Z",
+      createdBy: "ada@example.org",
+    };
+    let tokens: (typeof token)[] = [];
+    let posted: unknown;
+    routeFetch({
+      "GET /api/v1/admin/status": statusFixture({ problems: [] }),
+      "GET /api/v1/admin/groups": { items: [] },
+      "GET /api/v1/admin/scim-tokens": () => ({ items: tokens }),
+      "POST /api/v1/admin/scim-tokens": (init?: RequestInit) => {
+        posted = JSON.parse(String(init?.body));
+        tokens = [token];
+        return { ...token, secret: "cn_scim_secret_value" };
+      },
+    });
+    renderAt("/admin/setup/iam", () => <SetupPage app="iam" onCreated={() => undefined} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Create SCIM token" }));
+    expect(await screen.findByTestId("guide-token")).toHaveTextContent("cn_scim_secret_value");
+    expect(posted).toEqual({ name: "Meldgrove IAM", expiresInDays: 365 });
+    expect(screen.getByTestId("scim-url")).toHaveTextContent("https://connector.example.org/scim/v2");
+    expect(screen.getByText("Waiting for IAM's first request…")).toBeInTheDocument();
+    tokens = [{ ...token, lastUsedAt: new Date().toISOString() }];
+    expect(await screen.findByText("IAM is connected", undefined, { timeout: 5000 })).toBeInTheDocument();
+  });
+});
+
+function statusFixture(overrides: Partial<AdminStatus> = {}): AdminStatus {
+  return {
+    problems: [],
+    sources: [],
+    sourceChecks: { minutes: 15, lastRunAt: "2026-11-19T10:00:00.000Z" },
+    directory: { mode: "oidc", syncMinutes: null, lastSync: null, people: 12, groups: 3 },
+    scim: {
+      url: "https://connector.example.org/scim/v2",
+      tokens: 0,
+      people: 0,
+      lastUsedAt: null,
+      lastRequest: null,
+      lastError: null,
+    },
+    agents: {
+      apps: [],
+      personalTokens: 0,
+      serviceTokens: 0,
+      serviceLastUsedAt: null,
+      week: { requests: 0, failed: 0, people: 0, bots: 0 },
+    },
+    ...overrides,
+  };
+}
+
+describe("admin status", () => {
+  it("shows problems with a way to fix each, every source, and apps not connected yet", async () => {
+    const crmId = "0b5a3e5e-3c1f-4d8e-9f3a-343434343434";
+    routeFetch({
+      "GET /api/v1/admin/status": statusFixture({
+        problems: [
+          {
+            key: `source:${crmId}`,
+            severity: "error",
+            title: "CRM is failing",
+            detail: "CRM refused the credentials",
+            area: "source",
+            sourceId: crmId,
+          },
+          {
+            key: "people:conflicts",
+            severity: "warning",
+            title: "1 person has an email address that someone else has",
+            detail: "Correct the address in Keycloak.",
+            area: "people",
+            sourceId: null,
+          },
+        ],
+        sources: [
+          {
+            id: crmId,
+            slug: "crm",
+            name: "CRM",
+            kind: "crm",
+            enabled: true,
+            delivery: "live",
+            state: "failing",
+            status: { at: "2026-11-19T10:00:00.000Z", ok: false, message: "CRM refused the credentials" },
+            items: null,
+            lastDeliveryAt: null,
+            requests: { total: 4, failed: 2, lastError: null },
+          },
+        ],
+        agents: {
+          apps: [{ name: "Claude", people: 3, lastUsedAt: null }],
+          personalTokens: 1,
+          serviceTokens: 1,
+          serviceLastUsedAt: null,
+          week: { requests: 40, failed: 2, people: 3, bots: 1 },
+        },
+      }),
+    });
+    renderAt("/admin", AdminStatusPage);
+    const problems = await screen.findByRole("list", { name: "Needs attention" });
+    expect(within(problems).getByText("CRM is failing")).toBeInTheDocument();
+    expect(within(problems).getByRole("link", { name: "Open the setup" })).toHaveAttribute(
+      "href",
+      `/admin/setup/crm?source=${crmId}`,
+    );
+    expect(within(problems).getByRole("link", { name: "People" })).toHaveAttribute(
+      "href",
+      "/admin/people?q=conflict.invalid",
+    );
+    const crm = screen.getByTestId("source-crm");
+    expect(within(crm).getByText("Failing")).toBeInTheDocument();
+    expect(within(crm).getByText("Last 24 hours: 4 requests, 2 failed")).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("connect-logbook")).getByRole("link", { name: "Connect Logbook" }),
+    ).toHaveAttribute("href", "/admin/setup/logbook");
+    expect(screen.queryByTestId("connect-crm")).not.toBeInTheDocument();
+    expect(screen.getByText(/requests 40 · people 3 · bots 1/)).toBeInTheDocument();
+    expect(screen.getByText("Claude")).toBeInTheDocument();
+  });
+
+  it("says when everything works", async () => {
+    routeFetch({ "GET /api/v1/admin/status": statusFixture() });
+    renderAt("/admin", AdminStatusPage);
+    expect(await screen.findByText("Everything works")).toBeInTheDocument();
   });
 });
 

@@ -4,7 +4,8 @@ import { APP, signIn } from "./helpers";
 
 /*
  * The main flows in a real browser, signing in through Keycloak: an admin
- * connects a Logbook source and its webhook delivers a decision; people
+ * connects a Logbook source with its setup guide and its webhook delivers a
+ * decision; IAM and the Support Agent connect with their guides; people
  * find it in search and preview it; a reader is no admin; people outside
  * the access groups cannot sign in; an agent connects through OAuth and
  * finds the decision over MCP.
@@ -91,33 +92,72 @@ async function mcp(token: string, method: string, params: unknown) {
   };
 }
 
-test("an admin connects Logbook and its webhook delivers a decision", async ({ browser }) => {
+test("an admin connects Logbook with its guide, and the guide sees the first delivery", async ({
+  browser,
+}) => {
   const ada = await signIn(browser, "ada");
   await home(ada);
-  await ada.getByRole("link", { name: "Sources" }).click();
-  await ada.getByRole("button", { name: "Connect a source" }).first().click();
-  const dialog = ada.getByRole("dialog");
-  await dialog.getByRole("combobox").click();
-  await ada.getByRole("option", { name: "Meldgrove Logbook" }).click();
-  await dialog.getByLabel("Name", { exact: true }).fill("Logbook");
-  await expect(dialog.getByLabel("Short name")).toHaveValue("logbook");
-  await dialog.getByLabel("Address of the app").fill("https://logbook.example.org");
-  await dialog.getByRole("button", { name: "Connect" }).click();
+  await ada.getByRole("link", { name: "Status" }).click();
+  await ada.getByRole("link", { name: "Connect Logbook" }).click();
+  await expect(ada.getByRole("heading", { name: "Connect Meldgrove Logbook" })).toBeVisible();
+  await ada.getByLabel("Address").fill("https://logbook.example.org");
+  await ada.getByRole("button", { name: "Connect", exact: true }).click();
 
-  // The webhook setup opens: the URL, then a secret shown once.
-  await expect(ada.getByTestId("webhook-url")).toHaveText(`${APP}/hooks/logbook`);
-  await ada.getByRole("button", { name: "Generate webhook secret" }).click();
-  webhookSecret = (await ada.getByTestId("webhook-secret").textContent())!.trim();
+  // The two values for Logbook's environment, the secret shown once.
+  const env = (await ada.getByTestId("webhook-env").textContent())!;
+  expect(env).toContain(`WEBHOOK_URL=${APP}/hooks/logbook`);
+  webhookSecret = /WEBHOOK_SECRET=(\S+)/.exec(env)![1]!;
   expect(webhookSecret.length).toBeGreaterThan(20);
-  await ada.getByRole("button", { name: "Done" }).click();
+  await expect(ada.getByText("Waiting for Logbook…")).toBeVisible();
 
+  // A delivery with another secret is refused, and the guide says so.
   expect((await deliver("wrong-secret-wrong-secret", entry)).status).toBe(401);
-  const delivered = await deliver(webhookSecret, entry);
-  expect(delivered.status).toBe(200);
+  await expect(ada.getByText("Logbook's delivery was refused")).toBeVisible();
+  expect((await deliver(webhookSecret, entry)).status).toBe(200);
+  await expect(ada.getByText("Logbook delivered")).toBeVisible();
+  await expect(ada.getByText("Received LB-12 · 1 item")).toBeVisible();
 
-  await ada.reload();
-  await expect(ada.getByText("Received LB-12")).toBeVisible();
-  await expect(ada.getByText("1 item", { exact: true })).toBeVisible();
+  await ada.getByRole("link", { name: "Back to the status" }).click();
+  await expect(ada.getByTestId("source-logbook").getByText("Working")).toBeVisible();
+  await expect(ada.getByText("Waiting for the first delivery from Logbook")).toHaveCount(0);
+});
+
+test("an admin connects IAM and the Support Agent with their guides", async ({ browser }) => {
+  const ada = await signIn(browser, "ada");
+  await home(ada);
+  await ada.goto(`${APP}/admin/setup/iam`);
+  await ada.getByRole("button", { name: "Create SCIM token" }).click();
+  const scimToken = (await ada.getByTestId("guide-token").textContent())!.trim();
+  await expect(ada.getByTestId("scim-url")).toHaveText(`${APP}/scim/v2`);
+  await expect(ada.getByText("Waiting for IAM's first request…")).toBeVisible();
+  // What IAM's "Test connection" asks first.
+  const config = await fetch(`${APP}/scim/v2/ServiceProviderConfig`, {
+    headers: { authorization: `Bearer ${scimToken}` },
+  });
+  expect(config.status).toBe(200);
+  await expect(ada.getByText("IAM is connected")).toBeVisible();
+
+  await ada.goto(`${APP}/admin/setup/support-agent`);
+  await ada.getByRole("switch", { name: "Logbook: bots may read it" }).click();
+  await expect(ada.getByRole("switch", { name: "Logbook: bots may read it" })).toBeChecked();
+  await ada.getByRole("button", { name: "Create service token" }).click();
+  const serviceToken = (await ada.getByTestId("guide-token").textContent())!.trim();
+  await expect(ada.getByTestId("knowledge-url")).toHaveText(`${APP}/api/v1/knowledge/search`);
+  // The Support Agent's standard request.
+  const search = await fetch(`${APP}/api/v1/knowledge/search`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${serviceToken}`, "content-type": "application/json" },
+    body: JSON.stringify({ query: "trains", limit: 6 }),
+  });
+  expect(search.status).toBe(200);
+  expect(((await search.json()) as { results: { title: string }[] }).results[0]?.title).toContain(
+    "Trains for work trips",
+  );
+  await expect(ada.getByText("The Support Agent is connected")).toBeVisible();
+
+  await ada.getByRole("link", { name: "Back to the status" }).click();
+  await expect(ada.getByText("SCIM tokens: 1 · people managed: 0")).toBeVisible();
+  await expect(ada.getByText(/^Last request .*: GET \/ServiceProviderConfig$/)).toBeVisible();
 });
 
 test("people find the decision and read it in a preview", async ({ browser }) => {

@@ -124,7 +124,10 @@ export const activityEntrySchema = z.object({
   action: z.string(),
   query: z.string().nullable(),
   results: z.number().int(),
-  sources: z.array(z.object({ slug: z.string(), ok: z.boolean(), count: z.number().int() })),
+  /** How each source answered; `error` says why it failed. */
+  sources: z.array(
+    z.object({ slug: z.string(), ok: z.boolean(), count: z.number().int(), error: z.string().optional() }),
+  ),
   ms: z.number().int(),
 });
 export type ActivityEntry = z.infer<typeof activityEntrySchema>;

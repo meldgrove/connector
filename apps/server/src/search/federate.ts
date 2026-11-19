@@ -171,7 +171,12 @@ export async function logActivity(db: DbOrTx, principal: Principal, entry: Activ
       action: entry.action,
       query: entry.query?.slice(0, 500) ?? null,
       results: entry.results,
-      sources: entry.sources.map((source) => ({ slug: source.slug, ok: source.ok, count: source.count })),
+      sources: entry.sources.map((source) => ({
+        slug: source.slug,
+        ok: source.ok,
+        count: source.count,
+        ...(source.error ? { error: source.error.slice(0, 300) } : {}),
+      })),
       ms: entry.ms,
     })
     .catch((error: unknown) => logger.warn({ err: error }, "could not record activity"));

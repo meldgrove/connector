@@ -74,8 +74,8 @@ process.
 32`), the `OIDC_*` values, your address in `ADMIN_EMAILS`, `DIRECTORY`
    (`keycloak` with a Keycloak service account), and `SEARCH_LANGUAGES` for
    the languages of your Logbook and Library.
-6. **Deploy**, open `APP_URL`, sign in, and connect the first source under
-   **Administration → Sources** ([Sources](sources.md)).
+6. **Deploy**, open `APP_URL`, sign in, and connect the first source with
+   its guide under **Administration → Status** ([Sources](sources.md)).
 7. **Automatic updates:** set them up [on Coolify](#on-coolify).
 
 ## Debian
@@ -123,8 +123,8 @@ run the commands as root (`sudo -i`).
    passes the event streams of `/mcp` through without buffering. With
    `CONNECTOR_PORT` set, use that port instead of 3000.
 
-7. Open `APP_URL`, sign in, and connect the first source under
-   **Administration → Sources** ([Sources](sources.md)).
+7. Open `APP_URL`, sign in, and connect the first source with its guide
+   under **Administration → Status** ([Sources](sources.md)).
 8. **Automatic updates:** set them up [on Debian](#on-debian).
 
 ## Health checks

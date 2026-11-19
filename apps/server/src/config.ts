@@ -123,6 +123,12 @@ const schema = z
     SEARCH_LANGUAGES: withDefault(z.string(), "english"),
     /** How long a search waits for a live source (Handbook, CRM), in seconds. */
     SOURCE_TIMEOUT_SECONDS: withDefault(z.coerce.number().int().min(1).max(60), 8),
+    /**
+     * The worker checks live sources (Handbook, CRM) every this many minutes,
+     * so the status page notices a refused token or an app that is down.
+     * 0: only admins check.
+     */
+    SOURCE_CHECK_MINUTES: withDefault(z.coerce.number().int().min(0).max(1440), 15),
     /** Lifetime of access tokens of connected apps (OAuth, MCP), in minutes. */
     OAUTH_ACCESS_TOKEN_MINUTES: withDefault(z.coerce.number().int().min(5).max(1440), 60),
     /** Lifetime of refresh tokens of connected apps, in days; each use renews it. */

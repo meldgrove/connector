@@ -11,9 +11,10 @@ import { SOURCE_KIND_INFO, type SourceKind } from "@connector/shared/sources";
 import { config } from "../config";
 import type { Db } from "../db/client";
 import { items, linkRequests, sourceLinks, sources } from "../db/schema";
-import type { Principal, UserPrincipal } from "../auth/principal";
+import type { Principal, ServicePrincipal, UserPrincipal } from "../auth/principal";
 import { decryptJson, encryptJson, secretHint, SecretDecryptionError } from "../core/crypto";
 import { audit } from "../core/audit";
+import { putSetting } from "../core/settings";
 import { inAnyGroup } from "../directory/groups";
 import { conflict, notFound, validationError, zodFieldErrors } from "../http/errors";
 import { logger } from "../logger";
@@ -44,6 +45,18 @@ export function secretOf(row: SourceRow): Record<string, unknown> {
       logger.error({ sourceId: row.id }, "a source's secrets cannot be decrypted (ENCRYPTION_KEY changed?)");
       return {};
     }
+    throw error;
+  }
+}
+
+/** Whether a source has stored secrets, and whether ENCRYPTION_KEY still opens them. */
+export function secretState(row: SourceRow): "none" | "ok" | "unreadable" {
+  if (!row.secretEncrypted) return "none";
+  try {
+    decryptJson(row.secretEncrypted);
+    return "ok";
+  } catch (error) {
+    if (error instanceof SecretDecryptionError) return "unreadable";
     throw error;
   }
 }
@@ -92,7 +105,7 @@ export async function sourceView(db: Db, row: SourceRow): Promise<Source> {
 const KIND_ORDER: Record<SourceKind, number> = { handbook: 0, logbook: 1, crm: 2, library: 3 };
 
 /** Sources in the source order of their kind, then by position and name. */
-function ordered(rows: SourceRow[]): SourceRow[] {
+export function inSourceOrder(rows: SourceRow[]): SourceRow[] {
   return [...rows].sort(
     (a, b) =>
       (KIND_ORDER[a.kind as SourceKind] ?? 9) - (KIND_ORDER[b.kind as SourceKind] ?? 9) ||
@@ -102,7 +115,7 @@ function ordered(rows: SourceRow[]): SourceRow[] {
 }
 
 export async function listSources(db: Db): Promise<Source[]> {
-  const rows = ordered(await db.select().from(sources).orderBy(asc(sources.name)));
+  const rows = inSourceOrder(await db.select().from(sources).orderBy(asc(sources.name)));
   return Promise.all(rows.map((row) => sourceView(db, row)));
 }
 
@@ -297,20 +310,47 @@ export async function recordStatus(db: Db, id: string, ok: boolean, message: str
     .where(eq(sources.id, id));
 }
 
-/** Checks a source's address and credentials and stores the outcome. */
-export async function checkSource(db: Db, actor: UserPrincipal, id: string): Promise<SourceCheck> {
-  const row = await getSource(db, id);
+async function runCheck(db: Db, row: SourceRow, principal: Principal): Promise<SourceCheck> {
   const adapter = KINDS[kindOf(row)].adapter;
   const signal = AbortSignal.timeout(config().SOURCE_TIMEOUT_SECONDS * 1000 + 5000);
   let result: SourceCheck;
   try {
-    result = { ok: true, message: await adapter.check(adapterContext(db, row, actor, signal)) };
+    result = { ok: true, message: await adapter.check(adapterContext(db, row, principal, signal)) };
   } catch (error) {
     result = { ok: false, message: error instanceof Error ? error.message : "The check failed" };
   }
-  await recordStatus(db, id, result.ok, result.message);
+  await recordStatus(db, row.id, result.ok, result.message);
   return result;
 }
+
+/** Checks a source's address and credentials and stores the outcome. */
+export async function checkSource(db: Db, actor: UserPrincipal, id: string): Promise<SourceCheck> {
+  return runCheck(db, await getSource(db, id), actor);
+}
+
+/** The worker's checks use only each source's own credentials (service token, API key). */
+const WORKER: ServicePrincipal = {
+  kind: "service",
+  credentialId: "00000000-0000-0000-0000-000000000000",
+  name: "Connector",
+};
+
+/**
+ * Checks every enabled live source (SOURCE_CHECK_MINUTES), so a refused
+ * token or an app that is down shows on the status page before people
+ * notice. Webhook sources report through their deliveries instead.
+ */
+export async function checkLiveSources(db: Db): Promise<number> {
+  const rows = (await db.select().from(sources).where(eq(sources.enabled, true))).filter(
+    (row) => !isWebhookKind(row.kind),
+  );
+  await Promise.all(rows.map((row) => runCheck(db, row, WORKER)));
+  await putSetting(db, SOURCE_CHECKS_SETTING, { at: new Date().toISOString() });
+  return rows.length;
+}
+
+/** Settings key: when the worker last checked the live sources. */
+export const SOURCE_CHECKS_SETTING = "source_checks";
 
 /** Whether a caller may use a source (enabled; open to them or to service tokens). */
 export function mayUse(principal: Principal, row: SourceRow): boolean {
@@ -321,7 +361,7 @@ export function mayUse(principal: Principal, row: SourceRow): boolean {
 
 /** The sources a caller may use, in the source order; `slugs` narrows them. */
 export async function usableSources(db: Db, principal: Principal, slugs?: string[]): Promise<SourceRow[]> {
-  const rows = ordered(await db.select().from(sources).where(eq(sources.enabled, true)));
+  const rows = inSourceOrder(await db.select().from(sources).where(eq(sources.enabled, true)));
   return rows.filter(
     (row) => mayUse(principal, row) && (!slugs || slugs.length === 0 || slugs.includes(row.slug)),
   );

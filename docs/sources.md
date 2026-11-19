@@ -1,7 +1,8 @@
 # Sources
 
-A source is one connected app. Admins connect sources under
-**Administration → Sources**; each has a kind, an address, credentials,
+A source is one connected app. Admins connect sources with a setup guide
+per app (**Administration → Status**, or **Connect a source** under
+**Administration → Sources**); each has a kind, an address, credentials,
 and the people who may use it.
 
 | Kind               | Holds                                                      | How Connector reads it                                                |
@@ -37,6 +38,36 @@ Make the access groups match who may use the app itself. A service token or
 API key sees more than a single person might; Connector shows its results
 only to the people the source is open to.
 
+## Setup guides and status
+
+Each app has a guide at **Administration → Status**: where the app is, the
+credentials to create there (with a link to the right page of the app),
+who may use the source, and then a test (Handbook, CRM) or a wait for the
+first delivery (Logbook, Library) that turns green on its own. The guides
+for Meldgrove IAM and the Support Agent create their token, show it once,
+list the exact fields to enter in that app, and wait for its first request.
+
+**Administration → Status** shows every source with its state, refreshed
+every 30 seconds:
+
+| State                      | Meaning                                                                           |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| Working                    | The last check or delivery worked.                                                |
+| Failing                    | The last check or delivery failed, or the latest requests of agents and bots did. |
+| Waiting for first delivery | A webhook source that has not delivered yet.                                      |
+| Needs setup                | A credential is missing, or Connector cannot read it (`ENCRYPTION_KEY` changed).  |
+| Not checked yet            | A live source nobody checked yet.                                                 |
+| Off                        | Turned off.                                                                       |
+
+Above them, **Needs attention** lists what needs an admin, with a link to
+fix each: failing sources, a stopped worker or Keycloak sync, failed SCIM
+requests, service and SCIM tokens that expire within 14 days, expired or
+revoked tokens that a bot or IAM still sends, and people whose Keycloak
+address another person has. The worker checks the live sources every
+`SOURCE_CHECK_MINUTES` (15), so a refused token or an app that is down
+shows up without anyone searching. Failed requests count from the activity
+log (agents and bots; searches in the browser are not recorded).
+
 ## Source order
 
 When sources disagree, the higher level wins. Every result carries its
@@ -59,14 +90,16 @@ another.
 
 ## Meldgrove Handbook
 
-1. In Handbook, create a service token under **Administration → Service
-   tokens** (it reads every page that is not a draft).
-2. In Connector, connect a source of the kind Handbook with Handbook's
-   public address (its `APP_URL`; linked accounts need it) and the token. List the spaces that hold the purpose and the
-   rules (e.g. `purpose,policies`) as _rule spaces_.
+The guide **Connect Meldgrove Handbook** walks through these steps:
+
+1. Handbook's public address (its `APP_URL`; linked accounts need it).
+2. In Handbook, create a service token under **Administration → Service
+   tokens** (it reads every page that is not a draft) and paste it.
 3. Set _Access groups_ to the groups that may sign in to Handbook
    (Handbook's `ACCESS_GROUPS`), or leave it empty when everyone may.
-4. **Check** shows the number of spaces Connector can read.
+4. **Connect and test** saves the source and reads Handbook's spaces.
+5. Tick the spaces that hold the purpose and the rules: they become the
+   _rule spaces_.
 
 ### Linked accounts
 
@@ -94,13 +127,14 @@ links again). Unlinking revokes the tokens at Handbook.
 
 ## Meldgrove Logbook
 
-1. In Connector, connect a source of the kind Logbook with Logbook's
-   address (for display), then **Generate webhook secret** and copy it.
-2. In Logbook, set `WEBHOOK_URL` to the webhook address Connector shows
-   (`<APP_URL>/hooks/<slug>`) and `WEBHOOK_SECRET` to the secret, and
-   restart it.
+1. In the guide **Connect Meldgrove Logbook**, enter Logbook's address
+   (for links) and who may use it, and choose **Connect**. Connector
+   generates the webhook secret and shows both lines once:
+   `WEBHOOK_URL=<APP_URL>/hooks/<slug>` and `WEBHOOK_SECRET=…`.
+2. Add them to Logbook's environment and restart it.
 3. Logbook sends changes within a minute; its first nightly run (02:30)
-   sends every entry. The source's status shows the last delivery.
+   sends every entry. The guide waits and turns green at the first
+   delivery, or says why a delivery was refused (e.g. another secret).
 
 Logbook sends published updates, learnings and logged decisions, and
 decided or rejected proposals; never drafts or open proposals. Everyone
@@ -110,9 +144,8 @@ group. Decisions carry _in force_, _superseded by LB-…_ or _rejected_.
 
 ## Meldgrove Library
 
-1. In Connector, connect a source of the kind Library, generate its webhook
-   secret, and set Library's `WEBHOOK_URL` and `WEBHOOK_SECRET` as for
-   Logbook. Library resends every note in its first nightly run.
+1. Connect it with the guide **Connect Meldgrove Library** as for Logbook.
+   Library resends every note in its first nightly run.
 2. Notes for everyone are shown to everyone the source is open to. **Team
    notes** are shown only to the team: to members of the Keycloak group the
    note names (Library with `DIRECTORY=keycloak`, Connector with
@@ -131,8 +164,8 @@ or deleted.
    with it or with the whole organization, plus its own.
 2. Share with the key what everyone who may use the source may see, and
    set _Access groups_ accordingly (e.g. the fundraising team).
-3. In Connector, connect a source of the kind CRM with the CRM's address,
-   the key, and the record types to search.
+3. In Connector, the guide **Connect Meldgrove CRM** asks for the CRM's
+   address, the key and the record types to search, and tests them.
 
 Connector does not use CRM webhooks: their payloads skip the CRM's sharing
 rules.
@@ -140,17 +173,20 @@ rules.
 ## Meldgrove Support Agent (a bot that reads)
 
 The Support Agent answers questions in Slack from knowledge sources. One
-Connector service token gives it every source opened to service tokens:
+Connector service token gives it every source opened to service tokens.
+The guide **Connect the Meldgrove Support Agent** does the Connector side
+and lists the Support Agent's fields:
 
-1. In Connector, open the sources the bot may read to service tokens, and
-   create a service token under **Administration → Service tokens**.
-2. In the Support Agent, add a knowledge source of the kind _Search API_:
-   - URL: `<APP_URL>/api/v1/knowledge/search`
-   - Authentication: bearer, the service token
-   - Body template and paths: keep the defaults
-     (`{"query": "{{query}}", "limit": "{{limit}}"}`; results `results`,
-     title `title`, URL `url`, text `text`, section `section`): Connector
-     answers in the Support Agent's standard contract.
+1. Choose the sources the bot may read (_Bots may read it_).
+2. Create a service token; it is shown once.
+3. In the Support Agent, **Knowledge sources → Add knowledge source**:
+   - Search URL: `<APP_URL>/api/v1/knowledge/search`
+   - Authentication: Bearer token, the service token
+   - JSON body: the standard body
+     (`{"query": "{{query}}", "limit": "{{limit}}"}`)
+   - Response mapping: list of results `results`, title `title`, URL `url`,
+     text `text`, section `section` (Section is empty by default there)
+4. The guide turns green at the bot's first search.
 
 Anything the bot gets can reach everyone in its channels, so open only
 sources meant for all of them.
@@ -158,10 +194,13 @@ sources meant for all of them.
 ## Meldgrove IAM (people and groups)
 
 IAM provisions people and fills groups through SCIM 2.0
-([Identity and access](identity-and-access.md#scim-20)): add Connector in
-IAM as a _SCIM 2.0_ app with Connector's SCIM address and a SCIM token.
-IAM imports groups and does not create them, so create the groups IAM
-should fill under **Administration → Directory** first.
+([Identity and access](identity-and-access.md#scim-20)). The guide
+**Connect Meldgrove IAM** creates the groups IAM should fill (IAM imports
+groups and does not create them), creates a SCIM token, lists IAM's fields
+(**Admin → Connections → Add connection → SCIM 2.0 app**: SCIM base URL
+`<APP_URL>/scim/v2`, the bearer token, user name _Work email_, when access
+ends _Deactivate the user_, manage groups on) and waits for IAM's first
+request.
 
 ## Apps without an interface yet
 

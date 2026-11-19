@@ -1,14 +1,22 @@
 import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
-import { sourceCreateSchema, sourceUpdateSchema, type Link } from "@connector/shared/api/sources";
+import {
+  sourceCreateSchema,
+  sourceUpdateSchema,
+  type HandbookSpaceList,
+  type Link,
+} from "@connector/shared/api/sources";
+import { config } from "../config";
 import { getDb } from "../db/client";
 import { sourceLinks, sources } from "../db/schema";
 import type { AppEnv } from "../http/env";
-import { notFound } from "../http/errors";
+import { conflict, notFound } from "../http/errors";
 import { idParam, jsonBody, requireAdmin, requireWebUser } from "../http/middleware";
 import { logger } from "../logger";
+import { handbookSpaces } from "../sources/handbook";
 import { finishLink, mayLink, startLink, unlink } from "../sources/links";
 import {
+  adapterContext,
   checkSource,
   createSource,
   deleteSource,
@@ -53,6 +61,22 @@ router.delete("/admin/sources/:id", async (c) => {
 router.post("/admin/sources/:id/check", async (c) => {
   const actor = requireAdmin(c);
   return c.json(await checkSource(getDb(), actor, idParam(c)));
+});
+
+/** Handbook's spaces, for choosing the rule spaces (setup guide). */
+router.get("/admin/sources/:id/spaces", async (c) => {
+  const actor = requireAdmin(c);
+  const row = await getSource(getDb(), idParam(c));
+  if (row.kind !== "handbook") throw conflict("Only Handbook sources have spaces");
+  const signal = AbortSignal.timeout(config().SOURCE_TIMEOUT_SECONDS * 1000);
+  try {
+    const items = await handbookSpaces(adapterContext(getDb(), row, actor, signal));
+    const body: HandbookSpaceList = { items };
+    return c.json(body);
+  } catch (error) {
+    if (error instanceof SourceError) throw conflict(error.message);
+    throw error;
+  }
 });
 
 router.post("/admin/sources/:id/webhook-secret", async (c) => {

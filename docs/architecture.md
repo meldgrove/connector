@@ -55,8 +55,10 @@ One Docker image, one Node.js entry point (`apps/server/src/main.ts`);
   server under `/.well-known/*` and `/oauth/*`, MCP at `/mcp`, SCIM at
   `/scim/v2`, webhooks at `/hooks/<slug>`, health checks under `/-/`, and
   the built web app.
-- **worker**: syncs the Keycloak directory (`DIRECTORY=keycloak`), rebuilds
-  the index's search data when `SEARCH_LANGUAGES` changed, and removes
+- **worker**: syncs the Keycloak directory (`DIRECTORY=keycloak`), checks
+  the live sources every `SOURCE_CHECK_MINUTES` for the status page,
+  rebuilds the index's search data when `SEARCH_LANGUAGES` changed, and
+  removes
   expired OAuth requests and tokens, OAuth clients without a grant,
   unfinished account links, and old audit and activity entries.
 - **migrate**: applies the Drizzle migrations under an advisory lock.

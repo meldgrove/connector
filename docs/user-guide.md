@@ -53,6 +53,11 @@ an admin if a source is missing.
 
 ## Admins
 
+- **Status**: what needs an admin (failing sources, tokens that expire or
+  were revoked but are still sent, a stopped sync), every source's state,
+  the directory, and how much agents and bots use Connector. Each app has
+  a setup guide here: Handbook, Logbook, Library, CRM, Meldgrove IAM and
+  the Support Agent ([Sources](sources.md#setup-guides-and-status)).
 - **Sources**: connect Handbook, Logbook, Library and CRM, decide who may
   use them, check them ([Sources](sources.md)).
 - **People**: admins, blocking, removal.

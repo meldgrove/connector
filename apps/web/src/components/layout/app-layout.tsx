@@ -138,8 +138,13 @@ function AppSidebar({ appName }: { appName: string }) {
   const me = useMe();
   const t = useT(navMessages);
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  // Home and the admin status are parents of other pages; the setup guides belong to the status.
   const isActive = (to: string) =>
-    to === "/" ? pathname === "/" : pathname === to || pathname.startsWith(`${to}/`);
+    to === "/"
+      ? pathname === "/"
+      : to === "/admin"
+        ? pathname === "/admin" || pathname.startsWith("/admin/setup/")
+        : pathname === to || pathname.startsWith(`${to}/`);
 
   return (
     <Sidebar collapsible="icon">

@@ -84,7 +84,7 @@ export function AdminActivityPage() {
                         <div className="text-muted-foreground mt-1 flex flex-wrap gap-x-2 text-xs">
                           {entry.sources.map((source) => (
                             <span key={source.slug} className={source.ok ? undefined : "text-destructive"}>
-                              {source.slug}: {source.ok ? source.count : "×"}
+                              {source.slug}: {source.ok ? source.count : (source.error ?? "×")}
                             </span>
                           ))}
                         </div>

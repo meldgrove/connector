@@ -5,6 +5,7 @@ import type { DbOrTx } from "../db/client";
 import { credentials, oauthClients, oauthGrants, users } from "../db/schema";
 import { AppError } from "../http/errors";
 import { groupsOfUser } from "../directory/groups";
+import { logger } from "../logger";
 import type { Principal } from "./principal";
 
 /**
@@ -119,6 +120,28 @@ export async function revokeAgentAccess(tx: DbOrTx, userId: string) {
 }
 
 /**
+ * Marks a revoked or expired service or SCIM token that something still
+ * sends (at most once a minute), so the status page can tell admins that a
+ * bot or an identity system needs its new token. Only stored tokens match.
+ */
+async function noteRejected(db: DbOrTx, token: string, kind: "service" | "scim") {
+  await db
+    .update(credentials)
+    .set({ lastRejectedAt: sql`now()` })
+    .where(
+      and(
+        eq(credentials.tokenHash, hashToken(token)),
+        eq(credentials.kind, kind),
+        or(
+          isNull(credentials.lastRejectedAt),
+          lt(credentials.lastRejectedAt, sql`now() - interval '1 minute'`),
+        ),
+      ),
+    )
+    .catch((error: unknown) => logger.warn({ err: error }, "could not note a rejected token"));
+}
+
+/**
  * The principal of a bearer token (`Authorization: Bearer <token>`), or null
  * when it is unknown, expired, revoked, or its person is blocked. Throws
  * `signInNeeded()` when its person has to sign in again (`agentAccess`).
@@ -162,7 +185,10 @@ export async function resolveBearer(db: DbOrTx, token: string): Promise<Principa
         or(isNull(credentials.expiresAt), gt(credentials.expiresAt, now)),
       ),
     );
-  if (!row) return null;
+  if (!row) {
+    if (kind === "service") await noteRejected(db, token, "service");
+    return null;
+  }
   if (!row.lastUsedAt || now.getTime() - row.lastUsedAt.getTime() > LAST_USED_RESOLUTION_MS) {
     await db.update(credentials).set({ lastUsedAt: now }).where(eq(credentials.id, row.id));
     if (row.grantId)
@@ -206,7 +232,10 @@ export async function resolveScimToken(db: DbOrTx, token: string): Promise<strin
         or(isNull(credentials.expiresAt), gt(credentials.expiresAt, now)),
       ),
     );
-  if (!row) return null;
+  if (!row) {
+    await noteRejected(db, token, "scim");
+    return null;
+  }
   if (!row.lastUsedAt || now.getTime() - row.lastUsedAt.getTime() > LAST_USED_RESOLUTION_MS) {
     await db.update(credentials).set({ lastUsedAt: now }).where(eq(credentials.id, row.id));
   }

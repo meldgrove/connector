@@ -91,10 +91,12 @@ rather than delete them; Meldgrove IAM's _Deactivate the user_ does that. `activ
 sessions and revokes their agents; `true` lifts only the directory's block.
 Groups from Keycloak cannot be changed through SCIM.
 
-**Meldgrove IAM:** add Connector as a _SCIM 2.0_ app connection with the
-SCIM address and token. IAM imports groups and does not create them:
-create the groups it should fill under **Administration → Directory** first,
-then map IAM teams and access profiles to them.
+**Meldgrove IAM:** the guide **Connect Meldgrove IAM** (**Administration →
+Status**, or **Administration → Directory**) walks through it: create the
+groups IAM should fill (IAM imports groups and does not create them),
+create a SCIM token, and add Connector in IAM as a _SCIM 2.0 app_
+connection with the SCIM address and token; the guide waits for IAM's
+first request. Then map IAM teams and access profiles to the groups.
 
 ## Sign-in
 

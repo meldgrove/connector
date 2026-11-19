@@ -5,6 +5,7 @@ import { logger } from "../logger";
 import { monitored } from "../error-reporting";
 import { reindexIfLanguagesChanged } from "../sources/index-store";
 import { syncDirectory } from "../directory/sync";
+import { checkLiveSources } from "../sources/service";
 import { pruneExpired } from "./prune";
 
 export type Stop = () => Promise<void>;
@@ -69,8 +70,9 @@ export function startHeartbeat(jobs: Scheduled[], touch: () => unknown): () => v
 }
 
 /**
- * The worker: syncs the Keycloak directory (DIRECTORY=keycloak), rebuilds
- * the index of webhook sources when SEARCH_LANGUAGES changed, and removes
+ * The worker: syncs the Keycloak directory (DIRECTORY=keycloak), checks
+ * the live sources (SOURCE_CHECK_MINUTES), rebuilds the index of webhook
+ * sources when SEARCH_LANGUAGES changed, and removes
  * what expired (sign-in requests and tokens of connected apps, unfinished
  * account links, old log entries).
  */
@@ -84,6 +86,19 @@ export function startWorker(): Stop {
       monitored("connector-prune", { minutes: 60 }, () => pruneExpired(getDb())),
     ),
   ];
+  if (settings.SOURCE_CHECK_MINUTES > 0) {
+    jobs.push(
+      every(
+        {
+          name: "source-checks",
+          minutes: settings.SOURCE_CHECK_MINUTES,
+          firstDelayMs: 30_000,
+          maxRunMinutes: 10,
+        },
+        () => checkLiveSources(getDb()),
+      ),
+    );
+  }
   if (settings.DIRECTORY === "keycloak") {
     jobs.push(
       every(

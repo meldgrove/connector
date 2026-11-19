@@ -120,10 +120,10 @@ function PersonRow(props: {
   );
 }
 
-export function AdminPeoplePage() {
+export function AdminPeoplePage(props: { initialQuery?: string } = {}) {
   const t = useT(messages);
   const me = useMe();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(props.initialQuery ?? "");
   const q = useDebounced(query.trim());
   const people = usePeople(q);
   const update = useUpdatePerson();

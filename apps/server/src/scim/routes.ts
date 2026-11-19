@@ -6,6 +6,7 @@ import { resolveScimToken } from "../auth/credentials";
 import { bearerToken } from "../auth/resolve";
 import type { AppEnv } from "../http/env";
 import { logger } from "../logger";
+import { putSetting } from "../core/settings";
 import {
   createGroup,
   createUser,
@@ -76,6 +77,42 @@ function paging(c: Context<AppEnv>) {
   };
 }
 
+/** Settings keys: the last SCIM request, and the last one that failed (status page). */
+export const SCIM_LAST_REQUEST = "scim.last";
+export const SCIM_LAST_ERROR = "scim.last_error";
+
+/**
+ * Notes how an identity system's request went, without IDs or personal
+ * data: `PATCH /Users`, and for a failed change the plain reason. A missing
+ * person on a lookup (404 on GET) is normal and counts as answered.
+ */
+async function recordRequest(c: Context<AppEnv>) {
+  const method = c.req.method;
+  const status = c.res.status;
+  const resource = c.req.path.split("/scim/v2/")[1]?.split("/")[0] ?? "";
+  const label = `${method} /${resource}`;
+  const failed = status >= 500 || (status >= 400 && !(status === 404 && method === "GET"));
+  const at = new Date().toISOString();
+  let message = label;
+  if (failed) {
+    // Lookups can carry filter values (email addresses): only their error type is kept.
+    const reason =
+      c.error instanceof ScimError
+        ? method === "GET"
+          ? (c.error.scimType ?? "")
+          : c.error.detail
+        : "Something went wrong";
+    message = `${label} failed (HTTP ${status})${reason ? `: ${reason}` : ""}`.slice(0, 300);
+  }
+  try {
+    const db = getDb();
+    await putSetting(db, SCIM_LAST_REQUEST, { at, ok: !failed, message });
+    if (failed) await putSetting(db, SCIM_LAST_ERROR, { at, ok: false, message });
+  } catch (error) {
+    logger.warn({ err: error }, "could not record a SCIM request");
+  }
+}
+
 /** `attributes=displayName` or `excludedAttributes=members`: groups without their members. */
 function withoutMembers(c: Context<AppEnv>): boolean {
   const attributes = (c.req.query("attributes") ?? "").toLowerCase();
@@ -111,6 +148,7 @@ export function scimRoutes() {
       );
     }
     await next();
+    await recordRequest(c);
   });
   scim.onError((error, c) => {
     if (error instanceof ScimError) return scimError(c, error);

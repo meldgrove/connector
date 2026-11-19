@@ -1,21 +1,15 @@
+import { Link } from "@tanstack/react-router";
 import { Bot } from "lucide-react";
 import { Page, PageHeader } from "@/components/layout/page";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useT } from "@/i18n";
-import { useConnectInfo } from "@/modules/settings/api";
 import { AdminTokens } from "./admin-tokens";
 import { messages } from "./messages";
 
-/** The knowledge source settings of the Meldgrove Support Agent (HTTP search API). */
+/** The Meldgrove Support Agent: its setup guide. */
 function SupportAgentCard() {
   const t = useT(messages);
-  const appUrl = useConnectInfo().data?.appUrl ?? window.location.origin;
-  const rows: [string, string][] = [
-    [t("knowledgeUrl"), `${appUrl}/api/v1/knowledge/search`],
-    [t("method"), "POST, Authorization: Bearer <service token>"],
-    [t("bodyTemplate"), '{"query": "{{query}}", "limit": "{{limit}}"} (the default)'],
-    [t("paths"), "results · title · url · text · section (the defaults)"],
-  ];
   return (
     <Card>
       <CardHeader>
@@ -24,19 +18,12 @@ function SupportAgentCard() {
           {t("supportAgentTitle")}
         </CardTitle>
         <CardDescription>{t("supportAgentText")}</CardDescription>
+        <CardAction>
+          <Button asChild size="sm" variant="outline">
+            <Link to="/admin/setup/support-agent">{t("setUpSupportAgent")}</Link>
+          </Button>
+        </CardAction>
       </CardHeader>
-      <CardContent>
-        <dl className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-2 text-sm">
-          {rows.map(([label, value]) => (
-            <div key={label} className="contents">
-              <dt className="text-muted-foreground">{label}</dt>
-              <dd>
-                <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs break-all">{value}</code>
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </CardContent>
     </Card>
   );
 }
