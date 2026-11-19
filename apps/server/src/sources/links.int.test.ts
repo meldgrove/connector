@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { resetConfigForTests } from "../config";
 import { getDb } from "../db/client";
 import { sourceLinks } from "../db/schema";
 import { decryptJson, encryptJson } from "../core/crypto";
@@ -388,5 +389,70 @@ describe("linked accounts", () => {
       (await request("POST", "/api/v1/links/handbook", { token: await createToken(rita.id) })).status,
     ).toBe(403);
     expect(await getDb().select().from(sourceLinks).where(eq(sourceLinks.userId, rita.id))).toHaveLength(0);
+  });
+
+  it("ends a refresh within the request's time budget, so the link is not held", async () => {
+    process.env.SOURCE_TIMEOUT_SECONDS = "1";
+    resetConfigForTests();
+    const stuck = await startFakeApp((req) => {
+      switch (`${req.method} ${req.path}`) {
+        case "GET /.well-known/oauth-protected-resource":
+          return { json: { resource: `${stuck.url}/mcp`, authorization_servers: [stuck.url] } };
+        case "GET /.well-known/oauth-authorization-server":
+          return {
+            json: {
+              issuer: stuck.url,
+              authorization_endpoint: `${stuck.url}/oauth/authorize`,
+              token_endpoint: `${stuck.url}/oauth/token`,
+              registration_endpoint: `${stuck.url}/oauth/register`,
+              code_challenge_methods_supported: ["S256"],
+            },
+          };
+        case "POST /oauth/register":
+          return { status: 201, json: { client_id: "connector-client", client_secret: "client-secret" } };
+        case "POST /oauth/token":
+          return { delayMs: 8000, json: { access_token: "at-2", refresh_token: "rt-2", expires_in: 3600 } };
+        default:
+          return { json: { results: [] } };
+      }
+    });
+    try {
+      const source = await createSource({
+        kind: "handbook",
+        config: { baseUrl: stuck.url, ruleSpaces: [], allowLinking: true },
+        secret: { serviceToken: "svc" },
+      });
+      const rita = await createUser({ email: "rita@example.org" });
+      const [stored] = await getDb()
+        .insert(sourceLinks)
+        .values({
+          sourceId: source.id,
+          userId: rita.id,
+          tokensEncrypted: encryptJson({
+            accessToken: "at-1",
+            refreshToken: "rt-1",
+            expiresAt: Date.now() - 1000,
+          }),
+          label: "rita@example.org",
+        })
+        .returning();
+      const searched = await request("GET", "/api/v1/search?q=vpn", { token: await createToken(rita.id) });
+      expect(searched.body.sources).toMatchObject([{ ok: false, error: "handbook did not answer in time" }]);
+      // The refresh ended with the request: its row lock is free again.
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const lockFree = await getDb()
+        .transaction(async (tx) => {
+          await tx.execute(sql`select id from source_links where id = ${stored!.id} for update nowait`);
+        })
+        .then(
+          () => true,
+          () => false,
+        );
+      expect(lockFree).toBe(true);
+    } finally {
+      delete process.env.SOURCE_TIMEOUT_SECONDS;
+      resetConfigForTests();
+      await stuck.close();
+    }
   });
 });

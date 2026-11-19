@@ -64,9 +64,11 @@ packages/shared/src/  contracts, source kinds and order, limits
   on every delivery and deleted on removal. Never copy live sources into
   the database.
 - **Adapters** implement `Adapter` (`sources/types.ts`), throw
-  `SourceError` with short plain messages, and never let a source's failure
-  fail a federated request. Calls to apps go through `sourceRequest`
-  (`sources/http.ts`): timeouts, no redirects, size limits.
+  `SourceError` with short plain messages and a kind (callers branch on the
+  kind, never on a status or a message; what the app said stays out of the
+  diagnostic), and never let a source's failure fail a federated request.
+  Calls to apps go through `sourceRequest` or `sourceFetch`
+  (`sources/http.ts`): the caller's signal, no redirects, size limits.
 - **Every result links to its source** (absolute URL) and carries its
   authority (source order).
 - **Credentials** of Connector are stored as SHA-256 hashes; secrets are

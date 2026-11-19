@@ -186,7 +186,7 @@ export const crmAdapter: Adapter = {
         app: APP,
       });
     } catch (error) {
-      if (error instanceof SourceError && error.status === 404) return null;
+      if (error instanceof SourceError && error.kind === "not_found") return null;
       throw error;
     }
     const title = titleOf(record, parsedType.data);

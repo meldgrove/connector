@@ -56,11 +56,11 @@ router.post("/proposals", async (c) => {
     action: "propose",
     query: input.title,
     results: use.outcome.count,
-    // The log keeps no results: a failed proposal's message can name pages and change sets.
-    sources: [use.ok ? use.outcome : { ...use.outcome, error: "The proposal failed" }],
+    sources: [use.logged],
     ms: Math.round(performance.now() - started),
   });
-  if (!use.ok) throw new AppError(use.error.status === 422 ? 422 : 409, "proposal_failed", use.error.message);
+  if (!use.ok)
+    throw new AppError(use.error.kind === "rejected" ? 422 : 409, "proposal_failed", use.error.message);
   const result: ProposalResult = use.value;
   return c.json(result, 201);
 });

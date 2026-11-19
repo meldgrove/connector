@@ -83,7 +83,7 @@ export function handbookConfig(context: Pick<AdapterContext, "config">): Handboo
 /** The person's linked token, else the service token. */
 async function tokenFor(context: AdapterContext): Promise<string> {
   if (context.principal.kind === "user") {
-    const linked = await linkedAccessToken(context.db, context.source, context.principal.id);
+    const linked = await linkedAccessToken(context.db, context.source, context.principal.id, context.signal);
     if (linked) return linked;
   }
   const token = context.secret.serviceToken;
@@ -174,7 +174,7 @@ export const handbookAdapter: Adapter = {
         app: APP,
       });
     } catch (error) {
-      if (error instanceof SourceError && error.status === 404) return null;
+      if (error instanceof SourceError && error.kind === "not_found") return null;
       throw error;
     }
     const item: FetchedItem = {
@@ -274,7 +274,7 @@ export async function proposeHandbookChange(
 ): Promise<{ number: number; url: string; status: string }> {
   if (context.principal.kind !== "user") throw new SourceError("Only people can propose changes");
   const config = handbookConfig(context);
-  const token = await linkedAccessToken(context.db, context.source, context.principal.id);
+  const token = await linkedAccessToken(context.db, context.source, context.principal.id, context.signal);
   if (!token) {
     throw new SourceError(
       `Link your Handbook account first: open Connector, Settings → Linked accounts (the agent proposes as you)`,
@@ -306,13 +306,13 @@ export async function proposeHandbookChange(
       "GET",
       z.object({ id: z.string() }),
     ).catch((error: unknown) => {
-      if (error instanceof SourceError && error.status === 404) return null;
+      if (error instanceof SourceError && error.kind === "not_found") return null;
       throw error;
     });
     if (existing) {
       throw new SourceError(
         `A page exists at ${space}/${proposal.newPage.path}: propose edits to it (handbook:page:${existing.id})`,
-        409,
+        { diagnostic: "A page exists at that path" },
       );
     }
   } else {
@@ -340,10 +340,10 @@ export async function proposeHandbookChange(
     return { number: changeSet.number, url, status: submitted.status };
   } catch (error) {
     if (error instanceof SourceError) {
-      throw new SourceError(
-        `${error.message}. The change set #${changeSet.number} stays open: ${url}`,
-        error.status,
-      );
+      throw new SourceError(`${error.message}. The change set #${changeSet.number} stays open: ${url}`, {
+        kind: error.kind,
+        diagnostic: `${error.diagnostic}; a change set stays open`,
+      });
     }
     throw error;
   }

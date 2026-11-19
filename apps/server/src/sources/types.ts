@@ -38,14 +38,28 @@ export type Adapter = {
   recent(context: AdapterContext, since: Date, limit: number): Promise<Hit[]>;
 };
 
-/** A source that did not answer as expected; the message is shown to people and agents. */
+/**
+ * Why a source failed, for callers that act on it: the app has no such
+ * thing; it refused the credentials or the grant; it refused the request
+ * as invalid; anything else (unreachable, too slow, an answer Connector
+ * does not understand, a setup that is missing).
+ */
+export type FailureKind = "not_found" | "refused" | "rejected" | "failed";
+
+/**
+ * A source that did not answer as expected. The message is shown to people
+ * and agents and may quote the app; the diagnostic is Connector's own words
+ * only, for the activity log (by default the message, when it quotes nothing).
+ */
 export class SourceError extends Error {
-  constructor(
-    message: string,
-    readonly status?: number,
-  ) {
+  readonly kind: FailureKind;
+  readonly diagnostic: string;
+
+  constructor(message: string, options: { kind?: FailureKind; diagnostic?: string } = {}) {
     super(message);
     this.name = "SourceError";
+    this.kind = options.kind ?? "failed";
+    this.diagnostic = options.diagnostic ?? message;
   }
 }
 

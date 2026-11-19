@@ -296,7 +296,14 @@ describe("admin status", () => {
     expect(logged).toMatchObject({
       action: "propose",
       results: 0,
-      sources: [{ slug: "handbook", ok: false, error: "The proposal failed" }],
+      sources: [
+        {
+          slug: "handbook",
+          ok: false,
+          error:
+            "Link your Handbook account first: open Connector, Settings → Linked accounts (the agent proposes as you)",
+        },
+      ],
     });
     expect((await status(admin.id)).sources[0]).toMatchObject({ state: "unchecked", requests: { total: 0 } });
   });
