@@ -4,11 +4,11 @@ import { toast } from "sonner";
 import { AlertCircle, RefreshCw } from "lucide-react";
 import type { UpdateChannel, UpdaterStatus } from "@connector/shared/api/updates";
 import { Page, PageHeader } from "@/components/layout/page";
-import { ErrorState, LoadingState } from "@/components/states";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { ErrorState, LoadingState } from "@meldgrove/ui/states";
+import { Alert, AlertDescription } from "@meldgrove/ui/alert";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
+import { Card, CardContent } from "@meldgrove/ui/card";
 import {
   Field,
   FieldContent,
@@ -17,9 +17,9 @@ import {
   FieldLegend,
   FieldSet,
   FieldTitle,
-} from "@/components/ui/field";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Spinner } from "@/components/ui/spinner";
+} from "@meldgrove/ui/field";
+import { RadioGroup, RadioGroupItem } from "@meldgrove/ui/radio-group";
+import { Spinner } from "@meldgrove/ui/spinner";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { useAuthConfig } from "@/lib/auth-config";

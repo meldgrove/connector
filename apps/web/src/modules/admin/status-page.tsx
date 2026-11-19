@@ -5,9 +5,9 @@ import { Bot, CircleCheck, CircleX, Network, Plus, RefreshCw, TriangleAlert, Unp
 import type { AdminStatus, Problem, SourceHealth, SourceState } from "@connector/shared/api/status";
 import { SOURCE_KINDS, SOURCE_KIND_INFO } from "@connector/shared/sources";
 import { Page, PageHeader } from "@/components/layout/page";
-import { ErrorState, LoadingState } from "@/components/states";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { ErrorState, LoadingState } from "@meldgrove/ui/states";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
 import {
   Card,
   CardAction,
@@ -16,13 +16,13 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { Spinner } from "@/components/ui/spinner";
+} from "@meldgrove/ui/card";
+import { Separator } from "@meldgrove/ui/separator";
+import { Spinner } from "@meldgrove/ui/spinner";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { useFormatter } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 import { kindLabel } from "@/modules/home/home-page";
 import { useAdminStatus, useCheckSource } from "./api";
 import { messages } from "./messages";

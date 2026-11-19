@@ -15,8 +15,9 @@ npm workspaces, Node.js 26, strict TypeScript.
   `/.well-known` and `/oauth`, SCIM under `/scim/v2`, webhooks under
   `/hooks`), Better Auth (OIDC sign-in under `/api/auth`), Drizzle ORM on
   PostgreSQL, the MCP TypeScript SDK, pino logs, Sentry, Vitest.
-- `apps/web`: Vite + React 19, TanStack Router and Query, shadcn/ui with
-  Tailwind CSS 4, react-markdown. US English.
+- `apps/web`: Vite + React 19, TanStack Router and Query, Tailwind CSS 4
+  with `@meldgrove/ui` (the shared Meldgrove theme and shadcn/ui
+  components), react-markdown. US English.
 - `packages/shared` (`@connector/shared/*`): zod schemas of the API
   (`api/*.ts`), source kinds, the source order and item IDs
   (`sources.ts`), channels (`roles.ts`), limits.
@@ -71,6 +72,9 @@ packages/shared/src/  contracts, source kinds and order, limits
   shown once and never logged. Source credentials and linked accounts are
   encrypted with `ENCRYPTION_KEY` (`core/crypto.ts`) and never sent to the
   browser. Never log authorization codes, PKCE verifiers or tokens.
+- **UI components** come from `@meldgrove/ui` (`@meldgrove/ui/<name>`, `cn`
+  from `@meldgrove/ui/utils`); the app keeps no copies. A missing component or
+  a fix goes into that package.
 - **Errors:** throw `AppError` helpers (`http/errors.ts`) with short, plain
   messages.
 - **Logging:** `logger` with ids and codes; never item texts, titles,

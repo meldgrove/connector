@@ -16,7 +16,7 @@ import {
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
-} from "@/components/ui/sidebar";
+} from "@meldgrove/ui/sidebar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,10 +29,10 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Separator } from "@/components/ui/separator";
-import { TooltipProvider } from "@/components/ui/tooltip";
+} from "@meldgrove/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@meldgrove/ui/avatar";
+import { Separator } from "@meldgrove/ui/separator";
+import { TooltipProvider } from "@meldgrove/ui/tooltip";
 import { useMe } from "@/hooks/use-me";
 import { THEMES, useTheme, type Theme } from "@/lib/theme";
 import { authClient } from "@/lib/auth-client";
@@ -40,7 +40,7 @@ import { useAuthConfig } from "@/lib/auth-config";
 import { queryClient } from "@/lib/query";
 import { defineMessages, useT } from "@/i18n";
 import { NAVIGATION, navMessages } from "@/app/navigation";
-import { Input } from "@/components/ui/input";
+import { Input } from "@meldgrove/ui/input";
 import { UpdateButton } from "@/modules/updates/update-button";
 
 const messages = defineMessages({

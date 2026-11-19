@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpdaterStatus, UpdatesResponse } from "@connector/shared/api/updates";
 import type { Me } from "@connector/shared/api/users";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { TooltipProvider } from "@meldgrove/ui/tooltip";
 import { UpdateButton } from "./update-button";
 
 const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));

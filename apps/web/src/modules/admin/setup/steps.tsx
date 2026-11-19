@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { Check, CircleCheck, CircleX } from "lucide-react";
-import { CopyButton } from "@/components/copy-button";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Spinner } from "@/components/ui/spinner";
-import { cn } from "@/lib/utils";
+import { CopyButton } from "@meldgrove/ui/copy-button";
+import { Alert, AlertDescription, AlertTitle } from "@meldgrove/ui/alert";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@meldgrove/ui/card";
+import { Spinner } from "@meldgrove/ui/spinner";
+import { cn } from "@meldgrove/ui/utils";
 
 /** One numbered step of a setup guide; `done` shows a check instead of the number. */
 export function GuideStep(props: {

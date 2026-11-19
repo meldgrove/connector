@@ -3,14 +3,14 @@ import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Network, Plus, RefreshCw, UsersRound } from "lucide-react";
 import type { Group } from "@connector/shared/api/users";
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { CopyButton } from "@/components/copy-button";
+import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
+import { CopyButton } from "@meldgrove/ui/copy-button";
 import { Page, PageHeader } from "@/components/layout/page";
-import { ErrorState, LoadingState } from "@/components/states";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ErrorState, LoadingState } from "@meldgrove/ui/states";
+import { Alert, AlertDescription } from "@meldgrove/ui/alert";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@meldgrove/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -18,11 +18,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+} from "@meldgrove/ui/dialog";
+import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
+import { Input } from "@meldgrove/ui/input";
+import { Spinner } from "@meldgrove/ui/spinner";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@meldgrove/ui/table";
 import { useT } from "@/i18n";
 import { common } from "@/i18n/common";
 import { ApiError, errorMessage } from "@/lib/api";

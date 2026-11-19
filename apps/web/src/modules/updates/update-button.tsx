@@ -3,9 +3,9 @@ import { useIsMutating, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Download, ExternalLink, LoaderCircle, RefreshCw, TriangleAlert } from "lucide-react";
 import type { Update, UpdaterStatus, UpdatesResponse } from "@connector/shared/api/updates";
-import { ConfirmDialog } from "@/components/confirm-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
+import { Badge } from "@meldgrove/ui/badge";
+import { Button } from "@meldgrove/ui/button";
 import {
   Popover,
   PopoverContent,
@@ -13,14 +13,14 @@ import {
   PopoverHeader,
   PopoverTitle,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+} from "@meldgrove/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@meldgrove/ui/tooltip";
 import { useIsAdmin } from "@/hooks/use-me";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { useAuthConfig } from "@/lib/auth-config";
 import { useFormatter } from "@/lib/format";
-import { cn } from "@/lib/utils";
+import { cn } from "@meldgrove/ui/utils";
 import { CHECK_KEY, signedOut, updatesKey, useCheckUpdates, useInstallUpdate, useUpdates } from "./api";
 import { messages } from "./messages";
 import {
