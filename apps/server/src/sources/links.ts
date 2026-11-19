@@ -157,11 +157,15 @@ async function oauthClient(db: DbOrTx, source: SourceRow, discovery: Discovery):
   // lock; one that waited reads the registration it made.
   return db.transaction(async (tx) => {
     const [row] = await tx
-      .select({ stored: sources.oauthClientEncrypted })
+      .select({ stored: sources.oauthClientEncrypted, config: sources.config })
       .from(sources)
       .where(eq(sources.id, source.id))
       .for("update");
-    const stored = row?.stored ? decryptJson<OAuthClient>(row.stored) : {};
+    // The discovery belongs to the address the request started with; a moved source registers anew.
+    if (!row || baseUrlOf({ ...source, config: row.config }) !== baseUrlOf(source)) {
+      throw new SourceError("The source moved meanwhile; try again");
+    }
+    const stored = row.stored ? decryptJson<OAuthClient>(row.stored) : {};
     if (fits(stored)) return stored;
     if (!discovery.server.registration_endpoint) {
       throw new SourceError("The source's sign-in server does not offer dynamic client registration");

@@ -164,6 +164,9 @@ describe("Keycloak directory sync and identities", () => {
   it("drops admin rights from ADMIN_EMAILS also when the new address is taken, and grants of people Keycloak no longer lists", async () => {
     const root = await createUser({ email: "root@example.org", isAdmin: true });
     await getDb().update(users).set({ adminSource: "environment" }).where(eq(users.id, root.id));
+    // The occupied address is in ADMIN_EMAILS too: the placeholder still counts.
+    process.env.ADMIN_EMAILS = "root@example.org,taken@example.org";
+    resetConfigForTests();
     await createUser({ email: "taken@example.org" });
     const scimPerson = await createUser({ email: "olga@example.org", signInGroups: ["/staff"] });
     await getDb().update(users).set({ directorySource: "scim" }).where(eq(users.id, scimPerson.id));
@@ -182,6 +185,8 @@ describe("Keycloak directory sync and identities", () => {
     await ensureEnvironmentAdmins(getDb());
     const [still] = await getDb().select().from(users).where(eq(users.id, root.id));
     expect(still!.isAdmin).toBe(false);
+    process.env.ADMIN_EMAILS = "root@example.org";
+    resetConfigForTests();
     const [olga] = await getDb().select().from(users).where(eq(users.id, scimPerson.id));
     expect(olga!.signInGroups).toEqual([]);
   });

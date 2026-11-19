@@ -142,6 +142,11 @@ export async function syncDirectory(
             // Another person has the new address: this person keeps neither address,
             // so an address from ADMIN_EMAILS cannot make them admin again.
             const conflict = Boolean(taken) && existing.email !== email;
+            const written = conflict
+              ? `conflict-${id}@${CONFLICT_EMAIL_DOMAIN}`
+              : moves
+                ? email
+                : existing.email;
             if (conflict)
               logger.warn({ userId: id }, "a Keycloak user's new email address belongs to another person");
             await tx
@@ -152,11 +157,9 @@ export async function syncDirectory(
                 directoryId: user.id,
                 updatedAt: sql`now()`,
                 ...(moves ? { email } : {}),
-                ...(conflict ? { email: `conflict-${id}@${CONFLICT_EMAIL_DOMAIN}` } : {}),
-                // Admin through ADMIN_EMAILS belongs to the address, not the person.
-                ...(existing.email !== email &&
-                existing.adminSource === "environment" &&
-                !isEnvironmentAdmin(email)
+                ...(conflict ? { email: written } : {}),
+                // Admin through ADMIN_EMAILS belongs to the address the person keeps.
+                ...(existing.adminSource === "environment" && !isEnvironmentAdmin(written)
                   ? { isAdmin: false, adminSource: null }
                   : {}),
               })
