@@ -15,7 +15,9 @@ groups and tokens.
 | SCIM token                              | Identity systems such as Meldgrove IAM: people and groups at `/scim/v2`, nothing else.                                                                                                                |
 
 Admins come from `ADMIN_EMAILS` (always admins, also the way back in) or are
-made admins by another admin under **Administration → People**. There,
+made admins by another admin under **Administration → People**. Admin rights
+from `ADMIN_EMAILS` belong to the address: when the provider or the directory
+changes it to one not in the list, they end. There,
 admins can also block someone: blocked people cannot sign in, their sessions
 end, and their personal tokens and connected apps are revoked for good
 (unblocking does not bring them back).

@@ -195,6 +195,16 @@ describe("SCIM 2.0", () => {
         summary: "The directory unblocked olga@example.org",
       },
     ]);
+
+    // Renamed, then removed: the log keeps neither address.
+    await request("PATCH", `/scim/v2/Users/${id}`, {
+      token,
+      body: { Operations: [{ op: "replace", path: "userName", value: "olga.new@example.org" }] },
+    });
+    expect((await request("DELETE", `/scim/v2/Users/${id}`, { token })).status).toBe(204);
+    const summaries = (await getDb().select().from(auditLog)).map((entry) => entry.summary).join("\n");
+    expect(summaries).not.toContain("olga");
+    expect(summaries).toContain("The directory blocked a removed person");
   });
 
   it("keeps admin rights from ADMIN_EMAILS only while the new address is in ADMIN_EMAILS", async () => {
@@ -249,15 +259,24 @@ describe("SCIM 2.0", () => {
     expect(byAddress.body).toEqual(refused);
     expect(await person()).toMatchObject({ email: "root@example.org", blockedAt: null });
 
+    // Made admin by the last start under an address ADMIN_EMAILS no longer lists.
     await getDb()
       .update(users)
-      .set({ isAdmin: true, adminSource: "environment" })
+      .set({ email: "former.root@example.org", isAdmin: true, adminSource: "environment" })
       .where(eq(users.id, root.id));
     const byStart = await request("DELETE", `/scim/v2/Users/${root.id}`, { token });
     expect(byStart.status).toBe(409);
     expect(byStart.body).toEqual(refused);
+    const deactivated = await request("PATCH", `/scim/v2/Users/${root.id}`, {
+      token,
+      body: {
+        schemas: ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+        Operations: [{ op: "replace", path: "active", value: false }],
+      },
+    });
+    expect(deactivated.status).toBe(200);
     expect(await person()).toMatchObject({
-      email: "root@example.org",
+      email: "former.root@example.org",
       isAdmin: true,
       adminSource: "environment",
       blockedAt: null,

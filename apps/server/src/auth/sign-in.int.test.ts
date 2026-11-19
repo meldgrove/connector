@@ -172,6 +172,24 @@ describe("sign-in through the provider", () => {
     expect(await getDb().select().from(sessions)).toHaveLength(1);
   });
 
+  it("keeps admin rights from ADMIN_EMAILS with the address, when the provider changes it", async () => {
+    await ensureEnvironmentAdmins(getDb());
+    const [root] = await getDb().select().from(users).where(eq(users.email, "root@example.org"));
+    await signIn({ sub: "root", email: "root@example.org", email_verified: true, name: "Root" });
+    expect((await getDb().select().from(users).where(eq(users.id, root!.id)))[0]).toMatchObject({
+      isAdmin: true,
+      adminSource: "environment",
+    });
+    // The provider now says another address: the person signs in, as someone who is not in ADMIN_EMAILS.
+    const moved = await signIn({ sub: "root", email: "former.root@example.org", email_verified: true });
+    expect(moved).toMatchObject({ path: "/", error: null });
+    expect((await getDb().select().from(users).where(eq(users.id, root!.id)))[0]).toMatchObject({
+      email: "former.root@example.org",
+      isAdmin: false,
+      adminSource: null,
+    });
+  });
+
   it("trusts the provider's addresses when OIDC_REQUIRE_EMAIL_VERIFIED is off", async () => {
     setEnv({ OIDC_REQUIRE_EMAIL_VERIFIED: "false" });
     const eddie = await createUser({ email: "eddie@example.org", lastSignInAt: null });

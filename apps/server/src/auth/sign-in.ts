@@ -5,7 +5,7 @@ import { accounts, users } from "../db/schema";
 import { logger } from "../logger";
 import { createKeycloakClient, type KeycloakClient } from "../directory/keycloak";
 import { inAnyGroup } from "../directory/groups";
-import { restoreEnvironmentAdmin } from "../people/lifecycle";
+import { environmentAdminAtSignIn } from "../people/lifecycle";
 
 /** The claims of a JWT, without checking its signature (the sign-in already verified the ID token). */
 export function jwtClaims(token: string | null | undefined): Record<string, unknown> | null {
@@ -170,7 +170,7 @@ async function mayUseApp(userId: string): Promise<boolean> {
       logger.warn({ err: error, userId }, "could not read the groups at sign-in; the last known groups stay");
     }
   }
-  if (await restoreEnvironmentAdmin(db, user)) return true;
+  if (await environmentAdminAtSignIn(db, user)) return true;
   if (user.blockedAt) {
     logger.info({ userId }, "sign-in refused: blocked");
     return false;

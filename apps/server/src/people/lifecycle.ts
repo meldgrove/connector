@@ -1,4 +1,4 @@
-import { eq, notLike, or, sql } from "drizzle-orm";
+import { and, eq, notLike, or, sql } from "drizzle-orm";
 import { REMOVED_PERSON_NAME } from "@connector/shared/api/users";
 import type { Db, DbOrTx } from "../db/client";
 import {
@@ -113,12 +113,24 @@ export async function changeEmail(
 }
 
 /**
- * At sign-in, an address in ADMIN_EMAILS makes the person admin and lifts
- * any block, so ADMIN_EMAILS is always the way back in. Returns whether it
- * did.
+ * At sign-in: an address in ADMIN_EMAILS makes the person admin and lifts
+ * any block, so ADMIN_EMAILS is always the way back in. Admin rights from
+ * ADMIN_EMAILS end when the provider changed the address to one it does not
+ * list. Returns whether the person is an admin through ADMIN_EMAILS.
  */
-export async function restoreEnvironmentAdmin(db: DbOrTx, user: { id: string; email: string }) {
-  if (!isEnvironmentAdmin(user.email)) return false;
+export async function environmentAdminAtSignIn(
+  db: DbOrTx,
+  user: { id: string; email: string; adminSource: string | null },
+): Promise<boolean> {
+  if (!isEnvironmentAdmin(user.email)) {
+    if (user.adminSource === "environment") {
+      await db
+        .update(users)
+        .set({ isAdmin: false, adminSource: null, updatedAt: sql`now()` })
+        .where(eq(users.id, user.id));
+    }
+    return false;
+  }
   await db
     .update(users)
     .set({
@@ -189,6 +201,16 @@ export async function removePerson(db: Db, actor: UserPrincipal | null, userId: 
       .update(auditLog)
       .set({ summary: sql`replace(${auditLog.summary}, ${user.email}, ${REMOVED_IN_SUMMARIES})` })
       .where(sql`strpos(${auditLog.summary}, ${user.email}) > 0`);
+    // The directory's entries name the person by the address they had then.
+    for (const [action, verb] of [
+      ["person.blocked", "blocked"],
+      ["person.unblocked", "unblocked"],
+    ] as const) {
+      await tx
+        .update(auditLog)
+        .set({ summary: `The directory ${verb} ${REMOVED_IN_SUMMARIES}` })
+        .where(and(eq(auditLog.entityId, user.id), eq(auditLog.action, action)));
+    }
     await audit(tx, actor, {
       action: "person.removed",
       entityType: "user",
