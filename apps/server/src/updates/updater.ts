@@ -10,8 +10,9 @@ import { logger } from "../logger";
 
 /**
  * The calls of the Meldgrove Updater's API (`UPDATER_URL`) that admins make
- * through `/admin/updates`, and how long each may take. The updater has no
- * authentication; only the app reaches it, on the Compose network.
+ * through `/admin/updates`, and how long each may take. Only the app reaches
+ * it, on the Compose network, and sends `UPDATER_TOKEN`, which the updater
+ * requires when it has the same token (`API_TOKEN`).
  */
 export const UPDATER_CALLS = {
   status: { method: "GET", path: "/v1/status", timeoutMs: 3_000 },
@@ -48,14 +49,17 @@ async function send(base: string, request: UpdaterRequest): Promise<Outcome> {
       : request.call === "channel"
         ? { channel: request.channel }
         : undefined;
+  const token = config().UPDATER_TOKEN;
   let response: Response;
   let data: unknown;
   try {
     response = await fetch(`${base}${path}`, {
       method,
-      headers: body
-        ? { accept: "application/json", "content-type": "application/json" }
-        : { accept: "application/json" },
+      headers: {
+        accept: "application/json",
+        ...(body ? { "content-type": "application/json" } : {}),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
       body: body ? JSON.stringify(body) : undefined,
       redirect: "error",
       signal: AbortSignal.timeout(timeoutMs),
@@ -84,9 +88,11 @@ async function send(base: string, request: UpdaterRequest): Promise<Outcome> {
       kind: "refused",
       httpStatus: response.status,
       error:
-        typeof message === "string" && message.trim()
-          ? message.trim().slice(0, MAX_ERROR_LENGTH)
-          : `The update service refused (HTTP ${response.status}).`,
+        response.status === 401
+          ? "The update service refused the app's token. Set the same UPDATER_TOKEN for the app and the updater."
+          : typeof message === "string" && message.trim()
+            ? message.trim().slice(0, MAX_ERROR_LENGTH)
+            : `The update service refused (HTTP ${response.status}).`,
     };
   }
   const parsed = updaterStatusSchema.safeParse(data);

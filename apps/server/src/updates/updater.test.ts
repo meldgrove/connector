@@ -63,6 +63,38 @@ describe("askUpdater", () => {
     ]);
   });
 
+  it("sends UPDATER_TOKEN as a bearer token, and names it when the updater refuses", async () => {
+    process.env.UPDATER_TOKEN = "updater-token-0123456789";
+    resetConfigForTests();
+    updater.respond((call) =>
+      call.authorization === "Bearer updater-token-0123456789"
+        ? { body: updaterStatus() }
+        : {
+            status: 401,
+            body: { error: "The updater refused the request: its API token is missing or wrong." },
+          },
+    );
+    expect(await askUpdater({ call: "status" })).toMatchObject({ status: 200, body: { reachable: true } });
+    await askUpdater({ call: "install", version: "0.2.1" });
+    expect(updater.calls.map((call) => call.authorization)).toEqual([
+      "Bearer updater-token-0123456789",
+      "Bearer updater-token-0123456789",
+    ]);
+
+    process.env.UPDATER_TOKEN = "another-token-0123456789";
+    resetConfigForTests();
+    expect(await askUpdater({ call: "install", version: "0.2.1" })).toEqual({
+      status: 409,
+      body: {
+        app: { version: "0.2.0" },
+        reachable: true,
+        updater: null,
+        error:
+          "The update service refused the app's token. Set the same UPDATER_TOKEN for the app and the updater.",
+      },
+    });
+  });
+
   it("answers a refusal with 409, the updater's message and the latest status", async () => {
     updater.respond((call) =>
       call.path === "/v1/install"

@@ -71,6 +71,7 @@ See [Agents and MCP](agents.md).
 | `WORKER_HEARTBEAT_FILE`              | (image: `/tmp/worker-heartbeat`) | The worker touches it every few seconds while no job hangs, for health checks.                                     |
 | `WEB_DIST_DIR`, `MIGRATIONS_DIR`     | (built in)                       | Paths of the built web app and the migrations; only for unusual layouts.                                           |
 | `UPDATER_URL`                        | `http://updater:8080`            | The updater's API for the update button of admins ([Deployment](deployment.md#automatic-updates)). Empty: below.   |
+| `UPDATER_TOKEN`                      | (none)                           | The token the app sends to the updater (`openssl rand -base64 32`); `compose.yaml` makes the updater require it.   |
 
 Behind a reverse proxy, set `TRUST_PROXY`: the rate limits of sign-in and of
 connected apps (OAuth) count per client address, and without it every

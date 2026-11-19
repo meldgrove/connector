@@ -216,7 +216,7 @@ Under `/api/v1`, JSON, contracts in `packages/shared/src/api/`:
   `/admin/activity`, `/admin/status`.
 - Admins in the web app only (no tokens or agents): `GET /admin/updates`,
   `POST /admin/updates/check`, `/install`, `/channel`. They ask the
-  updater at `UPDATER_URL` and answer `UpdatesResponse`; a refusal of the
+  updater at `UPDATER_URL` with `UPDATER_TOKEN` and answer `UpdatesResponse`; a refusal of the
   updater comes back as 409 with `error`, an updater's 5xx as that 5xx.
 
 Errors are `{ error: { code, message, fields? } }`. Browser requests that
