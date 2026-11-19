@@ -16,8 +16,8 @@ npm workspaces, Node.js 26, strict TypeScript.
   `/hooks`), Better Auth (OIDC sign-in under `/api/auth`), Drizzle ORM on
   PostgreSQL, the MCP TypeScript SDK, pino logs, Sentry, Vitest.
 - `apps/web`: Vite + React 19, TanStack Router and Query, Tailwind CSS 4
-  with `@meldgrove/ui` (the shared Meldgrove theme and shadcn/ui
-  components), react-markdown. US English.
+  with `@meldgrove/ui` (the shared Meldgrove theme, shadcn/ui components
+  and update button), react-markdown. US English.
 - `packages/shared` (`@connector/shared/*`): zod schemas of the API
   (`api/*.ts`), source kinds, the source order and item IDs
   (`sources.ts`), channels (`roles.ts`), limits.

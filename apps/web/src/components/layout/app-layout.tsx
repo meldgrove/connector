@@ -41,7 +41,7 @@ import { queryClient } from "@/lib/query";
 import { defineMessages, useT } from "@/i18n";
 import { NAVIGATION, navMessages } from "@/app/navigation";
 import { Input } from "@meldgrove/ui/input";
-import { UpdateButton } from "@/modules/updates/update-button";
+import { AdminUpdateButton, AdminUpdates } from "@/modules/updates/updates";
 
 const messages = defineMessages({
   en: {
@@ -229,29 +229,31 @@ export function AppLayout() {
   }, [appName]);
 
   return (
-    <TooltipProvider delayDuration={300}>
-      <SidebarProvider>
-        <a
-          href="#main"
-          className="bg-background sr-only z-50 rounded-md px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
-        >
-          {m("skip")}
-        </a>
-        <AppSidebar appName={appName} />
-        <SidebarInset className="min-w-0">
-          <header className="bg-background/95 sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b px-4 backdrop-blur">
-            <SidebarTrigger className="-ml-1" />
-            <Separator orientation="vertical" className="mr-2 h-4" />
-            <HeaderSearch />
-            <div className="ml-auto flex shrink-0 items-center">
-              <UpdateButton />
-            </div>
-          </header>
-          <main id="main" className="flex-1">
-            <Outlet />
-          </main>
-        </SidebarInset>
-      </SidebarProvider>
-    </TooltipProvider>
+    <AdminUpdates appName={appName}>
+      <TooltipProvider delayDuration={300}>
+        <SidebarProvider>
+          <a
+            href="#main"
+            className="bg-background sr-only z-50 rounded-md px-3 py-2 focus:not-sr-only focus:fixed focus:top-2 focus:left-2"
+          >
+            {m("skip")}
+          </a>
+          <AppSidebar appName={appName} />
+          <SidebarInset className="min-w-0">
+            <header className="bg-background/95 sticky top-0 z-20 flex h-14 shrink-0 items-center gap-2 border-b px-4 backdrop-blur">
+              <SidebarTrigger className="-ml-1" />
+              <Separator orientation="vertical" className="mr-2 h-4" />
+              <HeaderSearch />
+              <div className="ml-auto flex shrink-0 items-center">
+                <AdminUpdateButton />
+              </div>
+            </header>
+            <main id="main" className="flex-1">
+              <Outlet />
+            </main>
+          </SidebarInset>
+        </SidebarProvider>
+      </TooltipProvider>
+    </AdminUpdates>
   );
 }
