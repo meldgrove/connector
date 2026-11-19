@@ -56,7 +56,8 @@ router.post("/proposals", async (c) => {
     action: "propose",
     query: input.title,
     results: use.outcome.count,
-    sources: [use.outcome],
+    // The log keeps no results: a failed proposal's message can name pages and change sets.
+    sources: [use.ok ? use.outcome : { ...use.outcome, error: "The proposal failed" }],
     ms: Math.round(performance.now() - started),
   });
   if (!use.ok) throw new AppError(use.error.status === 422 ? 422 : 409, "proposal_failed", use.error.message);

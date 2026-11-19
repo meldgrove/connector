@@ -58,6 +58,30 @@ describe("source use", () => {
     });
   });
 
+  it("lets a proposal that runs out of time say what it left behind", async () => {
+    const row = await createSource({ kind: "handbook", name: "Handbook", config: {} });
+    const use = await useSource(
+      getDb(),
+      rita,
+      row,
+      // Like proposeHandbookChange: its own error comes a little after the deadline.
+      (_, context) =>
+        new Promise<never>((_, reject) =>
+          context.signal.addEventListener("abort", () =>
+            setTimeout(
+              () => reject(new SourceError("Handbook did not answer in time. The change set #7 stays open")),
+              10,
+            ),
+          ),
+        ),
+      "propose",
+    );
+    expect(use).toMatchObject({
+      ok: false,
+      outcome: { error: "Handbook did not answer in time. The change set #7 stays open" },
+    });
+  });
+
   it("turns every failure into an outcome", async () => {
     const logbook = await createSource({ kind: "logbook", name: "Logbook", config: {} });
     await createSource({ kind: "library", name: "Library", config: {} });

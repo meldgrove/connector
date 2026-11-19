@@ -29,16 +29,21 @@ const CONNECTOR: ServicePrincipal = {
   name: "Connector",
 };
 
+type Budget = "read" | "propose" | "check";
+
 /**
  * Reads get SOURCE_TIMEOUT_SECONDS; a proposal makes several requests in a
  * row; a check gets a little longer, so the source's own answer comes first.
  */
-function budgetMs(kind: "read" | "propose" | "check"): number {
+function budgetMs(kind: Budget): number {
   const seconds = config().SOURCE_TIMEOUT_SECONDS;
   if (kind === "propose") return seconds * 3000;
   if (kind === "check") return seconds * 1000 + 5000;
   return seconds * 1000;
 }
+
+/** A proposal that runs out of time gets a moment to say which change set stays open. */
+const graceMs = (kind: Budget) => (kind === "propose" ? 1000 : 0);
 
 const countOf = (value: unknown) =>
   Array.isArray(value) ? value.length : value === null || value === undefined ? 0 : 1;
@@ -48,10 +53,11 @@ async function run<T>(
   row: SourceRow,
   principal: Principal,
   operation: Operation<T>,
-  budget: number,
+  budget: Budget,
 ): Promise<Use<T>> {
   const started = performance.now();
-  const signal = AbortSignal.timeout(budget);
+  const signal = AbortSignal.timeout(budgetMs(budget));
+  const grace = graceMs(budget);
   const late = () => new SourceError(`${row.name} did not answer in time`);
   const outcome = (ok: boolean, count: number, error: string | null): SourceOutcome => ({
     slug: row.slug,
@@ -74,7 +80,13 @@ async function run<T>(
     const value = await Promise.race([
       operation(KINDS[kindOf(row)].adapter, context),
       new Promise<never>((_, reject) =>
-        signal.addEventListener("abort", () => reject(late()), { once: true }),
+        signal.addEventListener(
+          "abort",
+          () => (grace ? setTimeout(() => reject(late()), grace) : reject(late())),
+          {
+            once: true,
+          },
+        ),
       ),
     ]);
     return { ok: true, value, outcome: outcome(true, countOf(value), null) };
@@ -102,7 +114,7 @@ export async function useSources<T>(
   operation: Operation<T[]>,
 ): Promise<{ answers: { row: SourceRow; value: T[] }[]; outcomes: SourceOutcome[] }> {
   const rows = await usableSources(db, principal, slugs);
-  const uses = await Promise.all(rows.map((row) => run(db, row, principal, operation, budgetMs("read"))));
+  const uses = await Promise.all(rows.map((row) => run(db, row, principal, operation, "read")));
   return {
     answers: rows.map((row, index) => {
       const use = uses[index]!;
@@ -121,7 +133,7 @@ export async function useSource<T>(
   budget: "read" | "propose" = "read",
 ): Promise<Use<T> | null> {
   if (!mayUse(principal, row)) return null;
-  return run(db, row, principal, operation, budgetMs(budget));
+  return run(db, row, principal, operation, budget);
 }
 
 /** For admin pages and the worker: one source as Connector itself, with its own credentials. */
@@ -131,5 +143,5 @@ export function administerSource<T>(
   operation: Operation<T>,
   budget: "read" | "check" = "read",
 ): Promise<Use<T>> {
-  return run(db, row, CONNECTOR, operation, budgetMs(budget));
+  return run(db, row, CONNECTOR, operation, budget);
 }
