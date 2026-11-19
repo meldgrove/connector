@@ -5,6 +5,7 @@ import { resetConfigForTests } from "../config";
 import { credentials, groups, users } from "../db/schema";
 import { createGroup, createToken, createUser, request, resetDatabase } from "../test/helpers";
 import type { KeycloakClient, KeycloakUser } from "./keycloak";
+import { ensureEnvironmentAdmins } from "../auth/bootstrap";
 import { syncDirectory } from "./sync";
 
 vi.mock("../auth/resolve", () => import("../test/resolve-mock"));
@@ -176,7 +177,11 @@ describe("Keycloak directory sync and identities", () => {
     claim.email = "taken@example.org";
     await syncDirectory(realm([claim], {}));
     const [kept] = await getDb().select().from(users).where(eq(users.id, root.id));
-    expect(kept).toMatchObject({ email: "root@example.org", isAdmin: false });
+    expect(kept).toMatchObject({ email: `conflict-${root.id}@conflict.invalid`, isAdmin: false });
+    // A restart makes the address in ADMIN_EMAILS an admin again, not this person.
+    await ensureEnvironmentAdmins(getDb());
+    const [still] = await getDb().select().from(users).where(eq(users.id, root.id));
+    expect(still!.isAdmin).toBe(false);
     const [olga] = await getDb().select().from(users).where(eq(users.id, scimPerson.id));
     expect(olga!.signInGroups).toEqual([]);
   });

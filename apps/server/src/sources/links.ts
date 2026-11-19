@@ -348,9 +348,13 @@ export async function linkedAccessToken(db: Db, source: SourceRow, userId: strin
 }
 
 async function refresh(db: Db, source: SourceRow, linkId: string): Promise<string | null> {
+  // Registration (if any) before the transaction, so the source lock below stays shared.
+  const discovery = await discover(source);
+  const client = await oauthClient(db, source, discovery);
   return db.transaction(async (tx) => {
-    // Source row first, then the link: the order every change of a source takes.
-    await tx.select({ id: sources.id }).from(sources).where(eq(sources.id, source.id)).for("update");
+    // Source row first (shared: refreshes of different links run side by
+    // side), then the link: the order every change of a source takes.
+    await tx.select({ id: sources.id }).from(sources).where(eq(sources.id, source.id)).for("share");
     const [link] = await tx.select().from(sourceLinks).where(eq(sourceLinks.id, linkId)).for("update");
     if (!link) return null;
     const tokens = decryptJson<Tokens>(link.tokensEncrypted) as Tokens;
@@ -361,8 +365,6 @@ async function refresh(db: Db, source: SourceRow, linkId: string): Promise<strin
       return null;
     }
     try {
-      const discovery = await discover(source);
-      const client = await oauthClient(tx, source, discovery);
       const answer = await postForm(
         discovery.server.token_endpoint,
         {
