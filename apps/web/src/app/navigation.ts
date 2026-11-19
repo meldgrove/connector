@@ -11,6 +11,7 @@ import {
   Unplug,
   UsersRound,
   Contact,
+  Download,
   Gauge,
 } from "lucide-react";
 import { defineMessages } from "@/i18n";
@@ -32,6 +33,7 @@ export const navMessages = defineMessages({
     serviceTokens: "Service tokens",
     activity: "Activity",
     audit: "Audit log",
+    updates: "Updates",
   },
 });
 
@@ -67,6 +69,7 @@ export const NAVIGATION: NavGroup[] = [
       { key: "serviceTokens", to: "/admin/service-tokens", icon: KeyRound },
       { key: "activity", to: "/admin/activity", icon: Activity },
       { key: "audit", to: "/admin/audit", icon: ScrollText },
+      { key: "updates", to: "/admin/updates", icon: Download },
     ],
   },
 ];

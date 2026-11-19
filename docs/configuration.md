@@ -1,6 +1,7 @@
 # Configuration
 
-Every setting that comes from the environment. Blank values count as unset.
+Every setting that comes from the environment. Blank values count as unset,
+except for `UPDATER_URL` (below).
 Sources, who may use them, groups and tokens are set up in the app.
 
 ## Required
@@ -69,10 +70,16 @@ See [Agents and MCP](agents.md).
 | `AUDIT_LOG_DAYS`                     | `365`                            | Days the audit log keeps entries; the worker deletes older ones. `0` keeps them all.                               |
 | `WORKER_HEARTBEAT_FILE`              | (image: `/tmp/worker-heartbeat`) | The worker touches it every few seconds while no job hangs, for health checks.                                     |
 | `WEB_DIST_DIR`, `MIGRATIONS_DIR`     | (built in)                       | Paths of the built web app and the migrations; only for unusual layouts.                                           |
+| `UPDATER_URL`                        | `http://updater:8080`            | The updater's API for the update button of admins ([Deployment](deployment.md#automatic-updates)). Empty: below.   |
 
 Behind a reverse proxy, set `TRUST_PROXY`: the rate limits of sign-in and of
 connected apps (OAuth) count per client address, and without it every
 request seems to come from the proxy.
+
+An empty `UPDATER_URL` switches the update button off only where the app
+reads its environment directly (`npm run dev`, one container without
+Compose). `compose.yaml` passes `${UPDATER_URL:-http://updater:8080}`, so an
+empty value there falls back to the default.
 
 ## Error reports (Sentry)
 

@@ -200,7 +200,11 @@ Under `/api/v1`, JSON, contracts in `packages/shared/src/api/`:
 - Admins: `/admin/sources…` (with `/check` and `/webhook-secret`),
   `/admin/people…`, `/admin/groups…`, `/admin/directory` (and `/sync`),
   `/admin/service-tokens…`, `/admin/scim-tokens…`, `/admin/audit`,
-  `/admin/activity`.
+  `/admin/activity`, `/admin/status`.
+- Admins in the web app only (no tokens or agents): `GET /admin/updates`,
+  `POST /admin/updates/check`, `/install`, `/channel`. They ask the
+  updater at `UPDATER_URL` and answer `UpdatesResponse`; a refusal of the
+  updater comes back as 409 with `error`, an updater's 5xx as that 5xx.
 
 Errors are `{ error: { code, message, fields? } }`. Browser requests that
 change something need the app's origin; bearer requests are exempt.
@@ -209,5 +213,6 @@ change something need the app's origin; bearer requests are exempt.
 
 `apps/web`: Vite, React 19, TanStack Router and Query, shadcn/ui with
 Tailwind CSS 4. Modules under `src/modules/<area>`: home, search, context,
-people, connect, settings, admin (sources, people, directory, service
-tokens, activity, audit), OAuth consent.
+people, connect, settings, admin (status and setup guides, sources,
+people, directory, service tokens, activity, audit), updates (the update
+button in the header and `/admin/updates`), OAuth consent.

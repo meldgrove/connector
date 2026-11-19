@@ -41,6 +41,7 @@ import { queryClient } from "@/lib/query";
 import { defineMessages, useT } from "@/i18n";
 import { NAVIGATION, navMessages } from "@/app/navigation";
 import { Input } from "@/components/ui/input";
+import { UpdateButton } from "@/modules/updates/update-button";
 
 const messages = defineMessages({
   en: {
@@ -242,6 +243,9 @@ export function AppLayout() {
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
             <HeaderSearch />
+            <div className="ml-auto flex shrink-0 items-center">
+              <UpdateButton />
+            </div>
           </header>
           <main id="main" className="flex-1">
             <Outlet />

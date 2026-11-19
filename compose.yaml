@@ -34,6 +34,8 @@ x-app-environment: &app-environment
   ADMIN_EMAILS: ${ADMIN_EMAILS:?Set ADMIN_EMAILS to the first admin's email address}
   # The reverse proxy in front of the app sets X-Forwarded-For.
   TRUST_PROXY: ${TRUST_PROXY:-true}
+  # The update button of admins asks the updater service below.
+  UPDATER_URL: ${UPDATER_URL:-http://updater:8080}
 
 x-app: &app
   image: *image
