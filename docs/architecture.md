@@ -144,7 +144,8 @@ request.
   exact reference (`LB-12`) ranks first; snippets from `ts_headline` with
   `\u0002`/`\u0003` marks (stripped for agents and bots).
 - **Activity**: every read by an agent, token or bot is recorded
-  (`logActivity`); web app reads are not.
+  (`logActivity`); web app reads are not. A failure is kept in Connector's
+  own words (the `SourceError`'s diagnostic), never what the app said.
 
 ## Webhooks
 
@@ -161,9 +162,10 @@ refused one.
 `sources/links.ts` is an OAuth 2.1 client: discovery (RFC 9728, RFC 8414),
 dynamic client registration once per source, authorization code with PKCE
 and `resource`, the `iss` check (RFC 9207), refresh before expiry under a
-row lock (a refresh token works once, and Handbook ends the whole grant on
-reuse), removal of the link when the source refuses the refresh token, and
-revocation on unlink. Proposals (`sources/handbook.ts`,
+row lock and within the request's time budget (a refresh token works once,
+and Handbook ends the whole grant on reuse), removal of the link when the
+source refuses the refresh token, and revocation on unlink. Its requests go
+through `sourceFetch` like every other call to an app. Proposals (`sources/handbook.ts`,
 `proposeHandbookChange`) create a change set, apply the edits or the new
 page, and submit it.
 

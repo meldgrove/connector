@@ -88,6 +88,7 @@ export type ActivityInput = {
   action: string;
   query: string | null;
   results: number;
+  /** The outcomes as the log keeps them: Connector's own words (`logged` of source use). */
   sources: SourceOutcome[];
   ms: number;
 };
@@ -96,16 +97,6 @@ export type ActivityInput = {
  * Records what an agent, token or bot asked (oversight). Searches in the
  * web app are not recorded. ACTIVITY_LOG_DAYS=0 records nothing.
  */
-/**
- * What the activity log keeps of a source's failure: Connector's own words,
- * without the text the app or its sign-in server sent (it can echo the
- * request of a linked account), e.g. "Handbook refused the credentials".
- * These are the messages that carry such text (sources/http.ts, links.ts).
- */
-const APP_TEXT =
-  /^(.*?(?:refused the credentials|does not allow this|answered HTTP \d+|The sign-in server refused|refused Connector's registration)): .*$/s;
-export const diagnosticOf = (error: string) => error.replace(APP_TEXT, "$1").slice(0, 300);
-
 export async function logActivity(db: DbOrTx, principal: Principal, entry: ActivityInput) {
   if (config().ACTIVITY_LOG_DAYS === 0) return;
   if (principal.kind === "user" && principal.channel === "web") return;
@@ -124,7 +115,7 @@ export async function logActivity(db: DbOrTx, principal: Principal, entry: Activ
         slug: source.slug,
         ok: source.ok,
         count: source.count,
-        ...(source.error ? { error: diagnosticOf(source.error) } : {}),
+        ...(source.error ? { error: source.error.slice(0, 300) } : {}),
       })),
       ms: entry.ms,
     })
@@ -146,7 +137,7 @@ export async function federatedSearch(
   action = "search",
 ): Promise<SearchResponse> {
   const started = performance.now();
-  const { answers, outcomes } = await useSources(db, principal, query.sources, (adapter, context) =>
+  const { answers, outcomes, logged } = await useSources(db, principal, query.sources, (adapter, context) =>
     adapter.search(context, query.q, query.limit),
   );
   const results = mergeResults(
@@ -157,7 +148,7 @@ export async function federatedSearch(
     action,
     query: query.q,
     results: results.length,
-    sources: outcomes,
+    sources: logged,
     ms: Math.round(performance.now() - started),
   });
   return { query: query.q, results, sources: outcomes };
@@ -185,7 +176,7 @@ export async function fetchItem(
       action: "fetch",
       query: id,
       results: use.outcome.count,
-      sources: [use.outcome],
+      sources: [use.logged],
       ms: Math.round(performance.now() - started),
     });
   if (!use.ok) throw new AppError(502, "source_failed", use.error.message);
@@ -206,17 +197,22 @@ export async function buildContext(
   request: ContextRequest,
 ): Promise<ContextResponse> {
   const started = performance.now();
-  const { answers, outcomes } = await useSources(db, principal, request.sources, async (adapter, context) => {
-    const hits = await adapter.search(context, request.topic, request.perSource);
-    // Live results without a date (Handbook pages): read their date, for the hints.
-    return Promise.all(
-      hits.map(async (hit) => {
-        if (hit.date || hit.authority !== "knowledge") return hit;
-        const item = await adapter.fetch(context, hit.type, hit.externalId).catch(() => null);
-        return item ? { ...hit, date: item.date } : hit;
-      }),
-    );
-  });
+  const { answers, outcomes, logged } = await useSources(
+    db,
+    principal,
+    request.sources,
+    async (adapter, context) => {
+      const hits = await adapter.search(context, request.topic, request.perSource);
+      // Live results without a date (Handbook pages): read their date, for the hints.
+      return Promise.all(
+        hits.map(async (hit) => {
+          if (hit.date || hit.authority !== "knowledge") return hit;
+          const item = await adapter.fetch(context, hit.type, hit.externalId).catch(() => null);
+          return item ? { ...hit, date: item.date } : hit;
+        }),
+      );
+    },
+  );
   const all = answers.flatMap(({ row, value }) => value.map((hit) => toResult(row, hit)));
   const sections = AUTHORITIES.map((authority) => ({
     authority,
@@ -253,7 +249,7 @@ export async function buildContext(
     action: "context",
     query: request.topic,
     results: all.length,
-    sources: outcomes,
+    sources: logged,
     ms: Math.round(performance.now() - started),
   });
   return { topic: request.topic, sections, notes: notes.slice(0, 20), sources: outcomes };
@@ -266,7 +262,7 @@ export async function recentChanges(
 ): Promise<RecentResponse> {
   const started = performance.now();
   const since = new Date(Date.now() - query.days * 86_400_000);
-  const { answers, outcomes } = await useSources(db, principal, query.sources, (adapter, context) =>
+  const { answers, outcomes, logged } = await useSources(db, principal, query.sources, (adapter, context) =>
     adapter.recent(context, since, query.limit),
   );
   const results = answers
@@ -277,7 +273,7 @@ export async function recentChanges(
     action: "recent",
     query: `${query.days} days`,
     results: results.length,
-    sources: outcomes,
+    sources: logged,
     ms: Math.round(performance.now() - started),
   });
   return { items: results, sources: outcomes };

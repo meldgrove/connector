@@ -12,15 +12,17 @@ import { SourceError, type Adapter, type AdapterContext, type SourceRow } from "
  * adapter. People, agents and bots get a source only when they may use it;
  * admin pages and the worker use it as Connector itself, with the source's
  * own credentials and never as a person. Every use has a time budget and
- * ends in an outcome, whether it worked or not, for the answer and the
- * activity log; a source's failure never escapes as an exception.
+ * ends in an outcome, whether it worked or not: for the answer (the
+ * failure's message) and for the activity log (Connector's own words,
+ * `logged`); a source's failure never escapes as an exception.
  */
 
 /** What runs against a source: one of its adapter's methods, or an operation of its own. */
 export type Operation<T> = (adapter: Adapter, context: AdapterContext) => Promise<T>;
 
-export type Use<T> =
-  { ok: true; value: T; outcome: SourceOutcome } | { ok: false; error: SourceError; outcome: SourceOutcome };
+export type Use<T> = { outcome: SourceOutcome; logged: SourceOutcome } & (
+  { ok: true; value: T } | { ok: false; error: SourceError }
+);
 
 /** Connector itself: admin pages and the worker use the source's own credentials. */
 const CONNECTOR: ServicePrincipal = {
@@ -83,13 +85,12 @@ async function run<T>(
         signal.addEventListener(
           "abort",
           () => (grace ? setTimeout(() => reject(late()), grace) : reject(late())),
-          {
-            once: true,
-          },
+          { once: true },
         ),
       ),
     ]);
-    return { ok: true, value, outcome: outcome(true, countOf(value), null) };
+    const done = outcome(true, countOf(value), null);
+    return { ok: true, value, outcome: done, logged: done };
   } catch (caught) {
     if (!(caught instanceof SourceError)) logger.error({ err: caught, sourceId: row.id }, "source failed");
     const error =
@@ -98,7 +99,8 @@ async function run<T>(
         : caught instanceof Error && caught.name === "TimeoutError"
           ? late()
           : new SourceError("The source failed");
-    return { ok: false, error, outcome: outcome(false, 0, error.message) };
+    const failed = outcome(false, 0, error.message);
+    return { ok: false, error, outcome: failed, logged: { ...failed, error: error.diagnostic } };
   }
 }
 
@@ -112,7 +114,11 @@ export async function useSources<T>(
   principal: Principal,
   slugs: string[] | undefined,
   operation: Operation<T[]>,
-): Promise<{ answers: { row: SourceRow; value: T[] }[]; outcomes: SourceOutcome[] }> {
+): Promise<{
+  answers: { row: SourceRow; value: T[] }[];
+  outcomes: SourceOutcome[];
+  logged: SourceOutcome[];
+}> {
   const rows = await usableSources(db, principal, slugs);
   const uses = await Promise.all(rows.map((row) => run(db, row, principal, operation, "read")));
   return {
@@ -121,6 +127,7 @@ export async function useSources<T>(
       return { row, value: use.ok ? use.value : [] };
     }),
     outcomes: uses.map((use) => use.outcome),
+    logged: uses.map((use) => use.logged),
   };
 }
 

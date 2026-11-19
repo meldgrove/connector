@@ -43,7 +43,11 @@ describe("source use", () => {
     };
     expect(await useSource(getDb(), rita, closed, operation)).toBeNull();
     expect(await useSource(getDb(), rita, off, operation)).toBeNull();
-    expect(await useSources(getDb(), rita, undefined, operation)).toEqual({ answers: [], outcomes: [] });
+    expect(await useSources(getDb(), rita, undefined, operation)).toEqual({
+      answers: [],
+      outcomes: [],
+      logged: [],
+    });
     expect(asked).toBe(0);
   });
 
@@ -85,12 +89,22 @@ describe("source use", () => {
   it("turns every failure into an outcome", async () => {
     const logbook = await createSource({ kind: "logbook", name: "Logbook", config: {} });
     await createSource({ kind: "library", name: "Library", config: {} });
-    const { answers, outcomes } = await useSources(getDb(), rita, undefined, async (adapter) => {
-      if (adapter.kind === "logbook") throw new SourceError("Logbook refused the credentials");
+    const { answers, outcomes, logged } = await useSources(getDb(), rita, undefined, async (adapter) => {
+      if (adapter.kind === "logbook") {
+        throw new SourceError("Logbook refused the credentials: Unknown token", {
+          kind: "refused",
+          diagnostic: "Logbook refused the credentials",
+        });
+      }
       throw new TypeError("a bug in an adapter");
     });
     expect(answers.map((answer) => answer.value)).toEqual([[], []]);
     expect(outcomes).toMatchObject([
+      { slug: "logbook", ok: false, error: "Logbook refused the credentials: Unknown token" },
+      { slug: "library", ok: false, error: "The source failed" },
+    ]);
+    // The activity log gets Connector's own words only.
+    expect(logged).toMatchObject([
       { slug: "logbook", ok: false, error: "Logbook refused the credentials" },
       { slug: "library", ok: false, error: "The source failed" },
     ]);
