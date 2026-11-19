@@ -122,6 +122,9 @@ export async function discover(source: SourceRow): Promise<Discovery> {
   if (cached && Date.now() - cached.at < DISCOVERY_CACHE_MS) return cached.value;
   const resource = await getJson(`${base}/.well-known/oauth-protected-resource`, resourceMetadataSchema);
   const issuer = resource.authorization_servers[0]!.replace(/\/+$/, "");
+  if (!sameOrigin(source, issuer)) {
+    throw new SourceError("The source's sign-in server is on another address than the source");
+  }
   const server = await getJson(`${issuer}/.well-known/oauth-authorization-server`, serverMetadataSchema);
   if (!(server.code_challenge_methods_supported ?? []).includes("S256")) {
     throw new SourceError("The source's sign-in server does not support PKCE (S256)");
@@ -186,7 +189,7 @@ async function oauthClient(db: DbOrTx, source: SourceRow, discovery: Discovery):
     if (!response.ok || !parsed.success) {
       const description = (body as { error_description?: unknown } | null)?.error_description;
       throw new SourceError(
-        `The source refused Connector's registration${typeof description === "string" ? `: ${description}` : ""}`,
+        `The source refused Connector's registration${typeof description === "string" ? `: ${description.slice(0, 200)}` : ""}`,
       );
     }
     const client: OAuthClient = {
@@ -306,13 +309,24 @@ export async function finishLink(
   );
   const tokens = tokensOf(answer);
   const label = await accountLabel(source, tokens.accessToken);
-  await db
-    .insert(sourceLinks)
-    .values({ sourceId: source.id, userId, tokensEncrypted: encryptJson(tokens), label })
-    .onConflictDoUpdate({
-      target: [sourceLinks.sourceId, sourceLinks.userId],
-      set: { tokensEncrypted: encryptJson(tokens), label, updatedAt: sql`now()` },
-    });
+  await db.transaction(async (tx) => {
+    // The tokens belong to the address the link started at; a source moved meanwhile gets none.
+    const [now] = await tx
+      .select({ config: sources.config })
+      .from(sources)
+      .where(eq(sources.id, source.id))
+      .for("update");
+    if (!now || baseUrlOf({ ...source, config: now.config }) !== baseUrlOf(source)) {
+      throw new SourceError("The source moved while you linked it; start again");
+    }
+    await tx
+      .insert(sourceLinks)
+      .values({ sourceId: source.id, userId, tokensEncrypted: encryptJson(tokens), label })
+      .onConflictDoUpdate({
+        target: [sourceLinks.sourceId, sourceLinks.userId],
+        set: { tokensEncrypted: encryptJson(tokens), label, updatedAt: sql`now()` },
+      });
+  });
   return source.slug;
 }
 
@@ -335,6 +349,8 @@ export async function linkedAccessToken(db: Db, source: SourceRow, userId: strin
 
 async function refresh(db: Db, source: SourceRow, linkId: string): Promise<string | null> {
   return db.transaction(async (tx) => {
+    // Source row first, then the link: the order every change of a source takes.
+    await tx.select({ id: sources.id }).from(sources).where(eq(sources.id, source.id)).for("update");
     const [link] = await tx.select().from(sourceLinks).where(eq(sourceLinks.id, linkId)).for("update");
     if (!link) return null;
     const tokens = decryptJson<Tokens>(link.tokensEncrypted) as Tokens;

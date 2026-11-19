@@ -145,7 +145,9 @@ export async function syncDirectory(
                 updatedAt: sql`now()`,
                 ...(moves ? { email } : {}),
                 // Admin through ADMIN_EMAILS belongs to the address, not the person.
-                ...(moves && existing.adminSource === "environment" && !isEnvironmentAdmin(email)
+                ...(existing.email !== email &&
+                existing.adminSource === "environment" &&
+                !isEnvironmentAdmin(email)
                   ? { isAdmin: false, adminSource: null }
                   : {}),
               })
@@ -188,10 +190,13 @@ export async function syncDirectory(
               : sql`true`,
           ),
         );
-      for (const person of gone) {
-        await setDirectoryActive(tx, person.id, false);
-        await tx.update(users).set({ signInGroups: [] }).where(eq(users.id, person.id));
-      }
+      for (const person of gone) await setDirectoryActive(tx, person.id, false);
+      // Keycloak gives the groups of sign-ins too: whoever it no longer lists has none.
+      const listed = [...idsByKeycloakId.values()];
+      await tx
+        .update(users)
+        .set({ signInGroups: [] })
+        .where(listed.length > 0 ? notInArray(users.id, listed) : sql`true`);
 
       // Groups: by Keycloak ID; a name an app or SCIM group already has stays theirs.
       const keptGroupIds: string[] = [];

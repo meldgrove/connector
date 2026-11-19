@@ -159,4 +159,25 @@ describe("Keycloak directory sync and identities", () => {
     const [moved] = await getDb().select().from(users).where(eq(users.id, root.id));
     expect(moved).toMatchObject({ email: "mallory@example.org", isAdmin: false, adminSource: null });
   });
+
+  it("drops admin rights from ADMIN_EMAILS also when the new address is taken, and grants of people Keycloak no longer lists", async () => {
+    const root = await createUser({ email: "root@example.org", isAdmin: true });
+    await getDb().update(users).set({ adminSource: "environment" }).where(eq(users.id, root.id));
+    await createUser({ email: "taken@example.org" });
+    const scimPerson = await createUser({ email: "olga@example.org", signInGroups: ["/staff"] });
+    await getDb().update(users).set({ directorySource: "scim" }).where(eq(users.id, scimPerson.id));
+    const claim: KeycloakUser = {
+      id: "kc-root",
+      email: "root@example.org",
+      emailVerified: true,
+      enabled: true,
+    };
+    await syncDirectory(realm([claim], {}));
+    claim.email = "taken@example.org";
+    await syncDirectory(realm([claim], {}));
+    const [kept] = await getDb().select().from(users).where(eq(users.id, root.id));
+    expect(kept).toMatchObject({ email: "root@example.org", isAdmin: false });
+    const [olga] = await getDb().select().from(users).where(eq(users.id, scimPerson.id));
+    expect(olga!.signInGroups).toEqual([]);
+  });
 });
