@@ -34,7 +34,8 @@ deleted. Removal deletes:
 - their name, email address and personal token names from the activity
   log, which keeps what their agents asked under “Removed person”, so its
   counts and the status page stay right; their email address and full
-  name also go from the search words of other people's agents.
+  name also go from the search words of other people's agents (a one-word
+  name stays there, since it is also an everyday word).
 
 Their agents' own search words stay in the activity log until
 `ACTIVITY_LOG_DAYS` ends them. If they sign in again, they start as a new

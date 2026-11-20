@@ -152,6 +152,29 @@ describe("removing a person", () => {
     ]);
   });
 
+  it("leaves others' search words alone when the person has a one-word name", async () => {
+    const admin = await createUser({ isAdmin: true, email: "ada@example.org" });
+    const max = await createUser({ email: "max@example.org", name: "Max" });
+    const ben = await createUser({ email: "ben@example.org", name: "Ben Baker" });
+    const bensToken = await createToken(ben.id, "Ben's agent");
+    // "Max" is also an everyday word; only Max's address names him for sure.
+    for (const q of ["max travel budget", "max@example.org"]) {
+      expect(
+        (await request("GET", `/api/v1/people?q=${encodeURIComponent(q)}`, { token: bensToken })).status,
+      ).toBe(200);
+    }
+
+    expect((await request("DELETE", `/api/v1/admin/people/${max.id}`, { userId: admin.id })).status).toBe(
+      204,
+    );
+
+    const log = (await request("GET", "/api/v1/admin/activity", { userId: admin.id })).body;
+    expect(log.items.map((entry: { query: string | null }) => entry.query)).toEqual([
+      "a removed person",
+      "max travel budget",
+    ]);
+  });
+
   it("refuses to remove oneself or people from ADMIN_EMAILS", async () => {
     const admin = await createUser({ isAdmin: true, email: "ada@example.org" });
     const root = await createUser({ email: "root@example.org", isAdmin: true });

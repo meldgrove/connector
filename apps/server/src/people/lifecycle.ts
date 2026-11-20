@@ -237,7 +237,9 @@ export async function removePerson(db: Db, actor: UserPrincipal | null, userId: 
       })
       .where(eq(activity.userId, user.id));
     // Anyone's agent may have looked them up by their address or full name, in any case.
-    for (const identifier of [user.email, user.name.trim()].filter(Boolean)) {
+    // A one-word name ("Max") is also an everyday word, so it stays in others' words.
+    const fullName = user.name.trim();
+    for (const identifier of [user.email, /\s/.test(fullName) ? fullName : ""].filter(Boolean)) {
       const pattern = standalone(identifier);
       await tx
         .update(activity)
