@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import {
   CRM_RECORD_TYPES,
   type CrmRecordType,
@@ -20,6 +20,7 @@ import {
 } from "@meldgrove/ui/dialog";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
 import { Input } from "@meldgrove/ui/input";
+import { SecretInput } from "@meldgrove/ui/secret-input";
 import { Spinner } from "@meldgrove/ui/spinner";
 import { Switch } from "@meldgrove/ui/switch";
 import { Textarea } from "@meldgrove/ui/textarea";
@@ -172,24 +173,26 @@ function TextField(props: {
   error?: string;
   required?: boolean;
   type?: string;
+  /** Hidden until shown with the eye button. */
+  secret?: boolean;
   placeholder?: string;
   disabled?: boolean;
   autoComplete?: string;
 }) {
+  const input = {
+    id: props.id,
+    value: props.value,
+    required: props.required,
+    disabled: props.disabled,
+    placeholder: props.placeholder,
+    autoComplete: props.autoComplete ?? "off",
+    "aria-invalid": Boolean(props.error),
+    onChange: (event: ChangeEvent<HTMLInputElement>) => props.onChange(event.target.value),
+  };
   return (
     <Field data-invalid={Boolean(props.error)}>
       <FieldLabel htmlFor={props.id}>{props.label}</FieldLabel>
-      <Input
-        id={props.id}
-        type={props.type ?? "text"}
-        value={props.value}
-        required={props.required}
-        disabled={props.disabled}
-        placeholder={props.placeholder}
-        autoComplete={props.autoComplete ?? "off"}
-        aria-invalid={Boolean(props.error)}
-        onChange={(event) => props.onChange(event.target.value)}
-      />
+      {props.secret ? <SecretInput {...input} /> : <Input type={props.type ?? "text"} {...input} />}
       {props.hint ? <FieldDescription>{props.hint}</FieldDescription> : null}
       {props.error ? <FieldError>{props.error}</FieldError> : null}
     </Field>
@@ -289,7 +292,7 @@ export function SourceDialog(props: {
                 id="source-service-token"
                 label={t("serviceToken")}
                 hint={hint("serviceToken", t("serviceTokenHint"))}
-                type="password"
+                secret
                 value={form.serviceToken}
                 error={fields["secret.serviceToken"]}
                 onChange={(value) => set("serviceToken", value)}
@@ -318,7 +321,7 @@ export function SourceDialog(props: {
                 id="source-api-key"
                 label={t("apiKey")}
                 hint={hint("apiKey", t("apiKeyHint"))}
-                type="password"
+                secret
                 value={form.apiKey}
                 error={fields["secret.apiKey"]}
                 onChange={(value) => set("apiKey", value)}
@@ -364,7 +367,7 @@ export function SourceDialog(props: {
               id="source-webhook-secret"
               label={t("webhookSecret")}
               hint={hint("webhookSecret", t("webhookSecretHint"))}
-              type="password"
+              secret
               value={form.webhookSecret}
               error={fields["secret.webhookSecret"]}
               onChange={(value) => set("webhookSecret", value)}

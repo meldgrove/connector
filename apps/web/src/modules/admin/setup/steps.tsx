@@ -1,8 +1,9 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { Check, CircleCheck, CircleX } from "lucide-react";
 import { CopyButton } from "@meldgrove/ui/copy-button";
 import { Alert, AlertDescription, AlertTitle } from "@meldgrove/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@meldgrove/ui/card";
+import { SecretInput } from "@meldgrove/ui/secret-input";
 import { Spinner } from "@meldgrove/ui/spinner";
 import { cn } from "@meldgrove/ui/utils";
 
@@ -40,36 +41,77 @@ export function GuideStep(props: {
   );
 }
 
-/** A value to copy into another app: label, the value in monospace, and a copy button. */
-export function CopyRow(props: { label: ReactNode; value: string; copy?: boolean; testId?: string }) {
+/**
+ * A value to copy into another app: label, the value in monospace, and a copy
+ * button. A `secret` stays hidden until shown with the eye button.
+ */
+export function CopyRow(props: {
+  label: ReactNode;
+  value: string;
+  copy?: boolean;
+  secret?: boolean;
+  testId?: string;
+}) {
+  const labelId = useId();
   return (
     <div className="grid gap-1.5 sm:grid-cols-[12rem_1fr] sm:items-center sm:gap-3">
-      <span className="text-muted-foreground text-sm">{props.label}</span>
-      <div className="flex min-w-0 items-center gap-2">
-        <code
-          className="bg-muted min-w-0 flex-1 rounded-md px-3 py-1.5 font-mono text-xs break-all"
+      <span className="text-muted-foreground text-sm" id={labelId}>
+        {props.label}
+      </span>
+      {props.secret ? (
+        <SecretInput
+          aria-labelledby={labelId}
+          value={props.value}
+          readOnly
+          copyable
+          className="min-w-0"
+          inputClassName="font-mono text-xs"
           data-testid={props.testId}
-        >
-          {props.value}
-        </code>
-        {props.copy === false ? null : <CopyButton text={props.value} />}
-      </div>
+        />
+      ) : (
+        <div className="flex min-w-0 items-center gap-2">
+          <code
+            className="bg-muted min-w-0 flex-1 rounded-md px-3 py-1.5 font-mono text-xs break-all"
+            data-testid={props.testId}
+          >
+            {props.value}
+          </code>
+          {props.copy === false ? null : <CopyButton text={props.value} />}
+        </div>
+      )}
     </div>
   );
 }
 
-/** Lines for an app's environment (`NAME=value`), with one button that copies them all. */
-export function EnvBlock(props: { lines: [string, string][]; copyLabel: string; testId?: string }) {
+/** What a secret value of an `EnvBlock` shows instead of itself. */
+const HIDDEN = "•".repeat(16);
+
+/**
+ * Lines for an app's environment (`NAME=value`), with one button that copies
+ * them all. A line marked secret shows dots; the button copies its value, and
+ * a hidden field below with the eye button shows it.
+ */
+export function EnvBlock(props: {
+  lines: [name: string, value: string, secret?: boolean][];
+  copyLabel: string;
+  testId?: string;
+}) {
   const text = props.lines.map(([name, value]) => `${name}=${value}`).join("\n");
+  const shown = props.lines.map(([name, value, secret]) => `${name}=${secret ? HIDDEN : value}`).join("\n");
   return (
     <div className="space-y-2">
       <pre
         className="bg-muted overflow-x-auto rounded-md px-3 py-2 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap"
         data-testid={props.testId}
       >
-        {text}
+        {shown}
       </pre>
       <CopyButton text={text} label={props.copyLabel} />
+      {props.lines
+        .filter(([, , secret]) => secret)
+        .map(([name, value]) => (
+          <CopyRow key={name} label={name} value={value} secret />
+        ))}
     </div>
   );
 }

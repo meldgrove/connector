@@ -26,6 +26,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@meldgrove/ui/dropdown-menu";
+import { SecretInput } from "@meldgrove/ui/secret-input";
 import { Spinner } from "@meldgrove/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@meldgrove/ui/table";
 import { useT } from "@/i18n";
@@ -98,19 +99,22 @@ function WebhookDialog(props: { source: Source | null; onClose: () => void }) {
         </div>
         {secret ? (
           <div className="space-y-1.5">
-            <p className="text-sm font-medium">{t("secretLabel")}</p>
+            <label htmlFor="webhook-secret" className="block text-sm font-medium">
+              {t("secretLabel")}
+            </label>
             <Alert>
               <AlertDescription>{t("secretOnce")}</AlertDescription>
             </Alert>
-            <div className="flex gap-2">
-              <code
-                className="bg-muted min-w-0 flex-1 rounded-md px-3 py-2 font-mono text-xs break-all"
-                data-testid="webhook-secret"
-              >
-                {secret}
-              </code>
-              <CopyButton text={secret} />
-            </div>
+            <SecretInput
+              // A new secret starts hidden, even when the one before was shown.
+              key={secret}
+              id="webhook-secret"
+              readOnly
+              copyable
+              value={secret}
+              inputClassName="font-mono text-xs"
+              data-testid="webhook-secret"
+            />
           </div>
         ) : source?.secrets.webhookSecret ? (
           <p className="text-muted-foreground text-sm">

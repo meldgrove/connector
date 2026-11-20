@@ -177,6 +177,30 @@ describe("admin sources", () => {
     );
     expect(screen.getAllByRole("menuitem")).toHaveLength(4);
   });
+
+  it("shows a new webhook secret hidden, even after the one before was shown", async () => {
+    let n = 0;
+    routeFetch({
+      "GET /api/v1/admin/sources": { items: [logbook] },
+      [`POST /api/v1/admin/sources/${logbook.id}/webhook-secret`]: () => ({
+        webhookSecret: `secret-${++n}-1234567890`,
+        createdAt: "2026-11-19T11:30:00.000Z",
+      }),
+    });
+    renderAt("/admin/sources", AdminSourcesPage);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Webhook" }));
+    await user.click(screen.getByRole("button", { name: "Generate webhook secret" }));
+    const first = await screen.findByLabelText("WEBHOOK_SECRET");
+    expect(first).toHaveValue("secret-1-1234567890");
+    expect(first).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(first).toHaveAttribute("type", "text");
+
+    await user.click(screen.getByRole("button", { name: "Generate a new secret" }));
+    await waitFor(() => expect(screen.getByLabelText("WEBHOOK_SECRET")).toHaveValue("secret-2-1234567890"));
+    expect(screen.getByLabelText("WEBHOOK_SECRET")).toHaveAttribute("type", "password");
+  });
 });
 
 describe("setup guides", () => {
@@ -215,8 +239,20 @@ describe("setup guides", () => {
       }),
     );
     expect(created).toHaveBeenCalledWith(logbook.id);
+    // The secret shows as dots; copying gives both lines with it.
     expect(await screen.findByTestId("webhook-env")).toHaveTextContent(
-      "WEBHOOK_URL=https://connector.example.org/hooks/logbook WEBHOOK_SECRET=generated-secret-1234567890",
+      "WEBHOOK_URL=https://connector.example.org/hooks/logbook WEBHOOK_SECRET=••••••••••••••••",
+    );
+    expect(screen.getByTestId("webhook-env")).not.toHaveTextContent("generated-secret");
+    // The eye button shows the secret on request.
+    const secretField = screen.getByLabelText("WEBHOOK_SECRET");
+    expect(secretField).toHaveAttribute("type", "password");
+    expect(secretField).toHaveValue("generated-secret-1234567890");
+    await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(secretField).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "Copy both lines" }));
+    await expect(navigator.clipboard.readText()).resolves.toBe(
+      "WEBHOOK_URL=https://connector.example.org/hooks/logbook\nWEBHOOK_SECRET=generated-secret-1234567890",
     );
     expect(screen.getByText("Waiting for Logbook…")).toBeInTheDocument();
 
@@ -229,8 +265,8 @@ describe("setup guides", () => {
     };
     expect(await screen.findByText("Logbook delivered", undefined, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByText("Received LB-12 · 1 item")).toBeInTheDocument();
-    // The secret stays on screen until the admin leaves.
-    expect(screen.getByTestId("webhook-env")).toHaveTextContent("generated-secret-1234567890");
+    // The secret stays to copy until the admin leaves.
+    expect(screen.getByTestId("webhook-env")).toHaveTextContent("WEBHOOK_SECRET=");
   });
 
   it("continues a webhook source: a refused delivery wins over an older one, and a new secret waits for a new delivery", async () => {
@@ -259,9 +295,8 @@ describe("setup guides", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Generate a new secret" }));
-    expect(await screen.findByTestId("webhook-env")).toHaveTextContent(
-      "WEBHOOK_SECRET=new-secret-1234567890",
-    );
+    await user.click(await screen.findByRole("button", { name: "Copy both lines" }));
+    expect(await navigator.clipboard.readText()).toContain("WEBHOOK_SECRET=new-secret-1234567890");
     // The old failure and the old delivery no longer count.
     expect(screen.getByText("Waiting for Logbook…")).toBeInTheDocument();
     stored = {
@@ -331,7 +366,14 @@ describe("setup guides", () => {
       "href",
       "https://handbook.example.org/admin/service-tokens",
     );
-    await user.type(screen.getByLabelText("Service token"), "hb_wrong");
+    // The token is hidden until the eye button shows it.
+    const token = screen.getByLabelText("Service token");
+    expect(token).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(token).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "Hide" }));
+    expect(token).toHaveAttribute("type", "password");
+    await user.type(token, "hb_wrong");
     await user.click(screen.getByRole("button", { name: "Connect and test" }));
     expect(await screen.findByText("Handbook did not accept the connection")).toBeInTheDocument();
     expect(screen.getByText("Handbook refused the credentials: Unknown token")).toBeInTheDocument();
@@ -377,7 +419,9 @@ describe("setup guides", () => {
     renderAt("/admin/setup/iam", () => <SetupPage app="iam" onCreated={() => undefined} />);
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Create SCIM token" }));
-    expect(await screen.findByTestId("guide-token")).toHaveTextContent("cn_scim_secret_value");
+    const shown = await screen.findByTestId("guide-token");
+    expect(shown).toHaveValue("cn_scim_secret_value");
+    expect(shown).toHaveAttribute("type", "password");
     expect(posted).toEqual({ name: "Meldgrove IAM", expiresInDays: 365 });
     expect(screen.getByTestId("scim-url")).toHaveTextContent("https://connector.example.org/scim/v2");
     expect(screen.getByText("Waiting for IAM's first request…")).toBeInTheDocument();
