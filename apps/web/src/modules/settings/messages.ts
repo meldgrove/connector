@@ -3,7 +3,7 @@ import { defineMessages } from "@/i18n";
 export const messages = defineMessages({
   en: {
     title: "Settings",
-    description: "Your agents, linked accounts and groups.",
+    description: "Your agents, linked accounts, groups and appearance.",
 
     agentsTitle: "What agents may do",
     agentsText:

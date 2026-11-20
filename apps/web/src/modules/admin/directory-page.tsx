@@ -5,7 +5,7 @@ import { Network, Plus, RefreshCw, UsersRound } from "lucide-react";
 import type { Group } from "@connector/shared/api/users";
 import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
 import { CopyButton } from "@meldgrove/ui/copy-button";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Alert, AlertDescription } from "@meldgrove/ui/alert";
 import { Badge } from "@meldgrove/ui/badge";

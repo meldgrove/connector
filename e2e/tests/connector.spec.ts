@@ -170,13 +170,21 @@ test("people find the decision and read it in a preview", async ({ browser }) =>
   const rita = await signIn(browser, "rita");
   await home(rita);
   await expect(rita.getByText("Logbook").first()).toBeVisible();
-  await rita.getByRole("searchbox", { name: "Search all your apps" }).first().fill("train");
+  await rita.getByRole("searchbox", { name: "Search all your apps" }).fill("train");
   await rita.keyboard.press("Enter");
   await rita.waitForURL(/\/search\?q=train/);
   const result = rita.getByRole("link", { name: /LB-12: Trains for work trips/ });
   await expect(result).toBeVisible();
   await expect(result).toHaveAttribute("href", "https://logbook.example.org/e/LB-12");
   await expect(rita.getByText("Decisions in force").first()).toBeVisible();
+
+  // The search of the sidebar asks the same API as Rita types.
+  await rita.keyboard.press("ControlOrMeta+K");
+  const search = rita.getByRole("dialog");
+  await search.getByRole("combobox").fill("train");
+  await expect(search.getByRole("option", { name: /LB-12: Trains for work trips/ })).toBeVisible();
+  await rita.keyboard.press("Escape");
+  await expect(search).toHaveCount(0);
   await rita.getByRole("button", { name: "Preview" }).first().click();
   const sheet = rita.getByRole("dialog");
   await expect(sheet.getByText("Book trains for every work trip under 600 km.")).toBeVisible();

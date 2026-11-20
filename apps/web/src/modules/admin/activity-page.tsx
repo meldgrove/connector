@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Activity, Search } from "lucide-react";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { Pager } from "@meldgrove/ui/pager";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Badge } from "@meldgrove/ui/badge";

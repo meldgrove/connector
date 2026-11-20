@@ -2,7 +2,6 @@ import { defineMessages } from "@/i18n";
 
 export const messages = defineMessages({
   en: {
-    back: "Status",
     title_handbook: "Connect Meldgrove Handbook",
     title_crm: "Connect Meldgrove CRM",
     title_logbook: "Connect Meldgrove Logbook",

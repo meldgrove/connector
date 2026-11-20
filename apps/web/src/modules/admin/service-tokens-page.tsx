@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Bot } from "lucide-react";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { Button } from "@meldgrove/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@meldgrove/ui/card";
 import { useT } from "@/i18n";
