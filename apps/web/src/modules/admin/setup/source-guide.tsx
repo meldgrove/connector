@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ChangeEvent, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { ChevronDown } from "lucide-react";
@@ -11,6 +11,7 @@ import { Checkbox } from "@meldgrove/ui/checkbox";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@meldgrove/ui/collapsible";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@meldgrove/ui/field";
 import { Input } from "@meldgrove/ui/input";
+import { SecretInput } from "@meldgrove/ui/secret-input";
 import { Spinner } from "@meldgrove/ui/spinner";
 import { Switch } from "@meldgrove/ui/switch";
 import { Textarea } from "@meldgrove/ui/textarea";
@@ -81,22 +82,24 @@ function TextField(props: {
   onChange: (value: string) => void;
   error?: string;
   type?: string;
+  /** Hidden until shown with the eye button. */
+  secret?: boolean;
   placeholder?: string;
   disabled?: boolean;
 }) {
+  const input = {
+    id: props.id,
+    value: props.value,
+    disabled: props.disabled,
+    placeholder: props.placeholder,
+    autoComplete: "off",
+    "aria-invalid": Boolean(props.error),
+    onChange: (event: ChangeEvent<HTMLInputElement>) => props.onChange(event.target.value),
+  };
   return (
     <Field data-invalid={Boolean(props.error)}>
       <FieldLabel htmlFor={props.id}>{props.label}</FieldLabel>
-      <Input
-        id={props.id}
-        type={props.type ?? "text"}
-        value={props.value}
-        disabled={props.disabled}
-        placeholder={props.placeholder}
-        autoComplete="off"
-        aria-invalid={Boolean(props.error)}
-        onChange={(event) => props.onChange(event.target.value)}
-      />
+      {props.secret ? <SecretInput {...input} /> : <Input type={props.type ?? "text"} {...input} />}
       {props.hint ? <FieldDescription>{props.hint}</FieldDescription> : null}
       {props.error ? <FieldError>{props.error}</FieldError> : null}
     </Field>
@@ -325,7 +328,7 @@ function GuideBody(props: {
         <TextField
           id="setup-token"
           label={t("serviceToken")}
-          type="password"
+          secret
           value={form.serviceToken}
           hint={storedHint("serviceToken")}
           error={fields["secret.serviceToken"]}
@@ -344,7 +347,7 @@ function GuideBody(props: {
         <TextField
           id="setup-api-key"
           label={t("apiKey")}
-          type="password"
+          secret
           value={form.apiKey}
           hint={storedHint("apiKey")}
           error={fields["secret.apiKey"]}
@@ -452,7 +455,7 @@ function GuideBody(props: {
               <EnvBlock
                 lines={[
                   ["WEBHOOK_URL", webhookUrl],
-                  ["WEBHOOK_SECRET", secret],
+                  ["WEBHOOK_SECRET", secret, true],
                 ]}
                 copyLabel={t("copyAll")}
                 testId="webhook-env"

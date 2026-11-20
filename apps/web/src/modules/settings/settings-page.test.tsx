@@ -83,7 +83,12 @@ describe("settings page", () => {
     await user.type(screen.getByLabelText("Name"), "Claude Code");
     await user.click(screen.getByRole("button", { name: "Create token" }));
 
-    expect(await screen.findByDisplayValue(created.secret)).toBeInTheDocument();
+    // Hidden, and copied without showing it.
+    const secret = await screen.findByLabelText("Token");
+    expect(secret).toHaveValue(created.secret);
+    expect(secret).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Copy" }));
+    await expect(navigator.clipboard.readText()).resolves.toBe(created.secret);
     expect(screen.getByText(/You won't see it again/)).toBeInTheDocument();
     const post = fetch.mock.calls.find(([, init]) => init?.method === "POST");
     expect(JSON.parse(String(post?.[1]?.body))).toEqual({ name: "Claude Code", expiresInDays: 90 });

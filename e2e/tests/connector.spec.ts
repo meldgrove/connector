@@ -103,8 +103,13 @@ test("an admin connects Logbook with its guide, and the guide sees the first del
   await ada.getByLabel("Address").fill("https://logbook.example.org");
   await ada.getByRole("button", { name: "Connect", exact: true }).click();
 
-  // The two values for Logbook's environment, the secret shown once.
-  const env = (await ada.getByTestId("webhook-env").textContent())!;
+  // The two values for Logbook's environment, the secret hidden and copied once.
+  await expect(ada.getByTestId("webhook-env")).toHaveText(
+    `WEBHOOK_URL=${APP}/hooks/logbook\nWEBHOOK_SECRET=${"•".repeat(16)}`,
+  );
+  await ada.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: APP });
+  await ada.getByRole("button", { name: "Copy both lines" }).click();
+  const env = await ada.evaluate(() => navigator.clipboard.readText());
   expect(env).toContain(`WEBHOOK_URL=${APP}/hooks/logbook`);
   webhookSecret = /WEBHOOK_SECRET=(\S+)/.exec(env)![1]!;
   expect(webhookSecret.length).toBeGreaterThan(20);
@@ -127,7 +132,7 @@ test("an admin connects IAM and the Support Agent with their guides", async ({ b
   await home(ada);
   await ada.goto(`${APP}/admin/setup/iam`);
   await ada.getByRole("button", { name: "Create SCIM token" }).click();
-  const scimToken = (await ada.getByTestId("guide-token").textContent())!.trim();
+  const scimToken = await ada.getByTestId("guide-token").inputValue();
   await expect(ada.getByTestId("scim-url")).toHaveText(`${APP}/scim/v2`);
   await expect(ada.getByText("Waiting for IAM's first request…")).toBeVisible();
   // What IAM's "Test connection" asks first.
@@ -141,7 +146,7 @@ test("an admin connects IAM and the Support Agent with their guides", async ({ b
   await ada.getByRole("switch", { name: "Logbook: bots may read it" }).click();
   await expect(ada.getByRole("switch", { name: "Logbook: bots may read it" })).toBeChecked();
   await ada.getByRole("button", { name: "Create service token" }).click();
-  const serviceToken = (await ada.getByTestId("guide-token").textContent())!.trim();
+  const serviceToken = await ada.getByTestId("guide-token").inputValue();
   await expect(ada.getByTestId("knowledge-url")).toHaveText(`${APP}/api/v1/knowledge/search`);
   // The Support Agent's standard request.
   const search = await fetch(`${APP}/api/v1/knowledge/search`, {

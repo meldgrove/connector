@@ -79,7 +79,7 @@ function TokenStep(props: {
     >
       {token.created ? (
         <>
-          <CopyRow label={t("token")} value={token.created.secret} testId="guide-token" />
+          <CopyRow label={t("token")} value={token.created.secret} secret testId="guide-token" />
           <p className="text-muted-foreground text-sm">{t("shownOnce")}</p>
         </>
       ) : (
@@ -184,7 +184,7 @@ export function IamGuide() {
           <CopyRow label={t("fieldName")} value="Connector" />
           <CopyRow label={t("fieldScimUrl")} value={status.data.scim.url} testId="scim-url" />
           {token.created ? (
-            <CopyRow label={t("fieldBearer")} value={token.created.secret} />
+            <CopyRow label={t("fieldBearer")} value={token.created.secret} secret />
           ) : (
             <CopyRow label={t("fieldBearer")} value={t("valueTokenAbove", { step: 2 })} copy={false} />
           )}
@@ -286,7 +286,7 @@ export function SupportAgentGuide() {
           />
           <CopyRow label={t("fieldAuth")} value={t("valueBearer")} copy={false} />
           {token.created ? (
-            <CopyRow label={t("fieldBearer")} value={token.created.secret} />
+            <CopyRow label={t("fieldBearer")} value={token.created.secret} secret />
           ) : (
             <CopyRow label={t("fieldBearer")} value={t("valueTokenAbove", { step: 2 })} copy={false} />
           )}

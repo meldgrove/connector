@@ -254,9 +254,9 @@ change something need the app's origin; bearer requests are exempt.
 
 `apps/web`: Vite, React 19, TanStack Router and Query, Tailwind CSS 4. The
 theme, the shadcn/ui components, the page states, the confirm dialog, the
-copy button, the pager and the update button come from the shared package
-`@meldgrove/ui`. Modules under `src/modules/<area>`: home, search,
-context, people, connect, settings, admin (status and setup guides,
+copy button, the secret input, the pager and the update button come from the
+shared package `@meldgrove/ui`. Modules under `src/modules/<area>`: home,
+search, context, people, connect, settings, admin (status and setup guides,
 sources, people, directory, service tokens, activity, audit), updates (the
 update button in the header and `/admin/updates`), OAuth consent.
 `modules/updates/updates.tsx` gives admins the package's
