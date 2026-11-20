@@ -79,6 +79,9 @@ process.
 6. **Deploy**, open `APP_URL`, sign in, and connect the first source with
    its guide under **Administration → Status** ([Sources](sources.md)).
 7. **Automatic updates:** set them up [on Coolify](#on-coolify).
+8. **Backups:** for [Meldgrove Backups](#backups), add `BACKUP_URL` and
+   `BACKUP_TOKEN` (from the app's source in Backups) to the environment
+   variables and redeploy.
 
 ## Debian
 
@@ -248,6 +251,32 @@ A version that failed to install is not tried again automatically; a newer
 one is.
 
 ## Backups
+
+### With Meldgrove Backups
+
+The `backup-agent` service in `compose.yaml` sends the database to
+[Meldgrove Backups](https://github.com/meldgrove/backups) when Backups asks.
+While `BACKUP_URL` is empty, it idles.
+
+1. In Backups, add a source of the kind **Meldgrove app**, and put the two
+   lines it shows (`BACKUP_URL`, `BACKUP_TOKEN`) into `.env`.
+2. Run `docker compose up -d`, then check the agent:
+   `docker compose exec backup-agent backup-agent check`.
+3. Let the backup end before the update window (`UPDATE_WINDOW`): automatic
+   updates run migrations without anyone present.
+
+Keep `ENCRYPTION_KEY` apart from the backups: a restore needs it, the backups
+do not hold it, and Backups shows the name on the source page.
+
+With [automatic updates](#automatic-updates), run the updater's host setup
+again once the app's folder has updater 0.2.2 or later (`git pull`): its
+deploy script then pulls the agent's image with each update. Without it:
+`docker compose pull backup-agent && docker compose up -d`.
+
+To restore, follow the
+[agent's guide](https://github.com/meldgrove/backup-agent#restore).
+
+### By hand
 
 Back up together:
 
