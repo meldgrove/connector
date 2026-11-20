@@ -111,6 +111,47 @@ describe("removing a person", () => {
     expect((await request("GET", "/api/v1/admin/people", { userId: admin.id })).body.items).toHaveLength(1);
   });
 
+  it("keeps the person's activity without their name, email or token names", async () => {
+    const LOOKALIKES = "marita@example.org Margarita Reader";
+    const admin = await createUser({ isAdmin: true, email: "ada@example.org" });
+    const rita = await createUser({ email: RITA, name: "Rita Reader" });
+    const ben = await createUser({ email: "ben@example.org", name: "Ben Baker" });
+    const ritasToken = await createToken(rita.id, "Rita's laptop");
+    const bensToken = await createToken(ben.id, "Ben's agent");
+    // Rita's agent asks; then, without a name, the log names her by her email.
+    expect((await request("GET", "/api/v1/people?q=budget", { token: ritasToken })).status).toBe(200);
+    await getDb().update(users).set({ name: "" }).where(eq(users.id, rita.id));
+    expect((await request("GET", "/api/v1/people?q=travel", { token: ritasToken })).status).toBe(200);
+    await getDb().update(users).set({ name: "Rita Reader" }).where(eq(users.id, rita.id));
+    // Someone else's agent looks her up by her address and her name, and looks up others who only look alike.
+    for (const q of ["Rita@Example.org", "rita reader budget", LOOKALIKES]) {
+      const asked = await request("GET", `/api/v1/people?q=${encodeURIComponent(q)}`, { token: bensToken });
+      expect(asked.status).toBe(200);
+    }
+
+    expect((await request("DELETE", `/api/v1/admin/people/${rita.id}`, { userId: admin.id })).status).toBe(
+      204,
+    );
+
+    const log = (await request("GET", "/api/v1/admin/activity", { userId: admin.id })).body;
+    expect(log.total).toBe(5);
+    const others = log.items.filter((entry: { query: string | null }) => entry.query !== LOOKALIKES);
+    expect(JSON.stringify(others)).not.toMatch(/rita/i);
+    expect(
+      log.items.map((entry: { actor: string; client: string | null; query: string | null }) => [
+        entry.actor,
+        entry.client,
+        entry.query,
+      ]),
+    ).toEqual([
+      ["Ben Baker", "Ben's agent", LOOKALIKES],
+      ["Ben Baker", "Ben's agent", "a removed person budget"],
+      ["Ben Baker", "Ben's agent", "a removed person"],
+      [REMOVED_PERSON_NAME, null, "travel"],
+      [REMOVED_PERSON_NAME, null, "budget"],
+    ]);
+  });
+
   it("refuses to remove oneself or people from ADMIN_EMAILS", async () => {
     const admin = await createUser({ isAdmin: true, email: "ada@example.org" });
     const root = await createUser({ email: "root@example.org", isAdmin: true });

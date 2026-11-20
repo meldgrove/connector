@@ -4,6 +4,7 @@ import { config } from "../config";
 import type { Db, DbOrTx } from "../db/client";
 import {
   accounts,
+  activity,
   auditLog,
   credentials,
   groupMembers,
@@ -145,16 +146,29 @@ export async function environmentAdminAtSignIn(db: DbOrTx, userId: string): Prom
   return false;
 }
 
-/** What audit summaries say instead of a removed person's email. */
+/** What audit summaries and search words say instead of a removed person's email or name. */
 const REMOVED_IN_SUMMARIES = "a removed person";
+
+/**
+ * A PostgreSQL pattern that finds `text` as a whole name or address, not
+ * inside another one: "ben@example.org" not in "ruben@example.org", "Rita
+ * Reader" not in "Margarita Reader".
+ */
+function standalone(text: string): string {
+  const literal = text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return `(?<![[:alnum:]_.+@-])${literal}(?![[:alnum:]_@-]|\\.[[:alnum:]])`;
+}
 
 /**
  * Removes a person while the logs stay readable: their name and email are
  * replaced; their provider accounts, sessions, tokens, connected apps,
  * pending app sign-ins, linked accounts and group memberships are deleted;
- * the audit log loses their email. If they sign in again, they come back as
- * a new, empty person. Not for people in ADMIN_EMAILS, and not for yourself.
- * `actor` null: the directory (SCIM) removed them.
+ * the audit log loses their email; the activity log keeps their entries
+ * under the placeholder name, without their personal tokens' names, and
+ * loses their email and full name from everyone's search words. If they
+ * sign in again, they come back as a new, empty person. Not for people in
+ * ADMIN_EMAILS, and not for yourself. `actor` null: the directory (SCIM)
+ * removed them.
  */
 export async function removePerson(db: Db, actor: UserPrincipal | null, userId: string): Promise<void> {
   await db.transaction(async (tx) => {
@@ -211,6 +225,24 @@ export async function removePerson(db: Db, actor: UserPrincipal | null, userId: 
         .update(auditLog)
         .set({ summary: `The directory ${verb} ${REMOVED_IN_SUMMARIES}` })
         .where(and(eq(auditLog.entityId, user.id), eq(auditLog.action, action)));
+    }
+    // The activity log keeps their entries, so counts and source health stay
+    // right. It named them by name or email, and a personal token by the name
+    // they gave it; connected apps are named by the app.
+    await tx
+      .update(activity)
+      .set({
+        actor: REMOVED_PERSON_NAME,
+        client: sql`case when ${activity.channel} = 'token' then null else ${activity.client} end`,
+      })
+      .where(eq(activity.userId, user.id));
+    // Anyone's agent may have looked them up by their address or full name, in any case.
+    for (const identifier of [user.email, user.name.trim()].filter(Boolean)) {
+      const pattern = standalone(identifier);
+      await tx
+        .update(activity)
+        .set({ query: sql`regexp_replace(${activity.query}, ${pattern}, ${REMOVED_IN_SUMMARIES}, 'gi')` })
+        .where(sql`${activity.query} ~* ${pattern}`);
     }
     await audit(tx, actor, {
       action: "person.removed",

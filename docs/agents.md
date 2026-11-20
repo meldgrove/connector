@@ -106,7 +106,9 @@ Connector runs its own OAuth 2.1 authorization server for MCP clients:
 asked: who, through which app, which tool, the search words, how many
 results, and how each source answered. It never stores the results.
 Searches in the web app are not listed. `ACTIVITY_LOG_DAYS` sets how long
-entries stay (default 90; 0 keeps none).
+entries stay (default 90; 0 keeps none). When an admin removes a person,
+their entries stay as “Removed person”, without their name, email address
+or token names ([Identity and access](identity-and-access.md#roles)).
 
 ## Safety
 

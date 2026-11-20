@@ -78,7 +78,8 @@ PostgreSQL holds everything (`apps/server/src/db/schema/`).
   `sign_in_groups`, `title`, `directory_source` (`scim`, `keycloak`) and
   `directory_id`. The provider's tokens are removed after the sign-in check.
   Removed people keep their row under a `removed.invalid` address, so the
-  logs still name someone.
+  logs still name someone; `removePerson` also takes their name and email
+  out of `audit_log` and `activity`.
 - `groups`, `group_members`: directory groups (`app`, `scim`, `keycloak`)
   with their identity system ID (`external_id`).
 - `sources`: as above; `secret_encrypted` and `oauth_client_encrypted`
