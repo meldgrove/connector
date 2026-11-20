@@ -5,7 +5,7 @@ import { logger } from "../logger";
 import { monitored } from "../error-reporting";
 import { reindexIfLanguagesChanged } from "../sources/index-store";
 import { syncDirectory } from "../directory/sync";
-import { checkLiveSources } from "../sources/service";
+import { checkLiveSources } from "../sources/health";
 import { pruneExpired } from "./prune";
 
 export type Stop = () => Promise<void>;

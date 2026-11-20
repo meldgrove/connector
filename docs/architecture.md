@@ -44,6 +44,10 @@ what webhook sources send, replaced on every change and deleted on removal.
   rule spaces are `rules`, Logbook decisions in force are `decision`.
 - **Principal**: who asks (`auth/principal.ts`): a person (web session,
   personal token, connected app) with their groups, or a service token.
+- **Source health**: how a source is doing (`sources/health.ts`), from its
+  last check or delivery, agents' and bots' reads of it, and its
+  credentials. The status page gets every signal; people and agents see
+  only whether the last check or delivery worked.
 
 ## Processes
 
@@ -155,7 +159,29 @@ time, refuses timestamps more than 300 seconds off, then validates the
 payload with zod. Logbook `entry.changed` and Library `note.changed`
 replace the item (`upsertItem`), `note.removed` deletes it. Deliveries are
 idempotent; the source's status shows the last delivery or the last
-refused one.
+refused one (`recordDelivery`, source health).
+
+## Source health
+
+`sources/health.ts` records and judges how every source is doing. It
+records the checks of live sources (`checkSource` for the admin's button,
+`checkLiveSources` for the worker; both ask the app through
+`administerSource`) and the deliveries and refused deliveries of webhook
+sources (`recordDelivery`), each stamped with the database's time so the
+setup guide compares one clock. Judging reads only the database, never the
+apps, including agents' and bots' reads of a source from the activity log:
+the last 24 hours, since the source with that slug was created, proposals
+left out.
+
+Two readers get two depths:
+
+- **The status page** (`sourcesHealth`): a state per source (off, setup,
+  failing, waiting, unchecked, ok, the first that applies) with the
+  problem that needs an admin, and whether the worker still checks. A
+  source whose latest read failed stays failing until a read works again,
+  whatever a check says.
+- **The home page and `list_sources`** (`lastCheckOrDeliveryOk`): whether
+  the last check or delivery worked, and nothing else.
 
 ## Linked accounts
 

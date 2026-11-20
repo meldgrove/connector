@@ -7,7 +7,8 @@ import { logger } from "../logger";
 import { removeItem, upsertItem } from "./index-store";
 import { libraryItem, libraryPayloadSchema } from "./library";
 import { logbookItem, logbookPayloadSchema } from "./logbook";
-import { recordDelivery, recordStatus, secretOf, sourceBySlug } from "./service";
+import { recordDelivery } from "./health";
+import { secretOf, sourceBySlug } from "./service";
 
 /**
  * Webhooks of Meldgrove apps at /hooks/<source slug> (docs/sources.md).
@@ -83,12 +84,7 @@ export function webhookRoutes() {
       })
     ) {
       logger.warn({ sourceId: source.id }, "webhook refused: bad signature or old timestamp");
-      await recordStatus(
-        db,
-        source.id,
-        false,
-        "A delivery had a wrong signature: check that both sides use the same secret",
-      );
+      await recordDelivery(db, source, { ok: false, refused: "signature" });
       return reply(c, 401, "Invalid signature");
     }
     let payload: unknown;
@@ -101,28 +97,28 @@ export function webhookRoutes() {
     if (source.kind === "logbook") {
       const parsed = logbookPayloadSchema.safeParse(payload);
       if (!parsed.success) {
-        await recordStatus(db, source.id, false, "A delivery did not look like a Logbook entry");
+        await recordDelivery(db, source, { ok: false, refused: "payload" });
         return reply(c, 400, "Not a Logbook entry");
       }
       const item = logbookItem(parsed.data);
       await upsertItem(db, source.id, item);
-      await recordDelivery(db, source.id, `Received ${item.ref}`);
+      await recordDelivery(db, source, { ok: true, message: `Received ${item.ref}` });
       return reply(c, 200, `Stored ${item.ref}`);
     }
 
     const parsed = libraryPayloadSchema.safeParse(payload);
     if (!parsed.success) {
-      await recordStatus(db, source.id, false, "A delivery did not look like a Library note");
+      await recordDelivery(db, source, { ok: false, refused: "payload" });
       return reply(c, 400, "Not a Library note");
     }
     if (parsed.data.event === "note.removed") {
       await removeItem(db, source.id, parsed.data.note.id);
-      await recordDelivery(db, source.id, "Removed a note");
+      await recordDelivery(db, source, { ok: true, message: "Removed a note" });
       return reply(c, 200, "Removed");
     }
     const item = libraryItem(parsed.data.note);
     await upsertItem(db, source.id, item);
-    await recordDelivery(db, source.id, `Received ${item.ref}`);
+    await recordDelivery(db, source, { ok: true, message: `Received ${item.ref}` });
     return reply(c, 200, `Stored ${item.ref}`);
   });
 
