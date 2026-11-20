@@ -6,7 +6,7 @@ import { SOURCE_KINDS, SOURCE_KIND_INFO } from "@connector/shared/sources";
 import type { Source } from "@connector/shared/api/sources";
 import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
 import { CopyButton } from "@meldgrove/ui/copy-button";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Alert, AlertDescription } from "@meldgrove/ui/alert";
 import { Badge } from "@meldgrove/ui/badge";

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { ArrowRight, Cable, Link2, Search, Unplug } from "lucide-react";
 import type { SourceSummary } from "@connector/shared/api/sources";
 import { SOURCE_KIND_INFO } from "@connector/shared/sources";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { ResultRow } from "@/components/results";
 import { SourceStateBadge } from "@/components/source-state";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";

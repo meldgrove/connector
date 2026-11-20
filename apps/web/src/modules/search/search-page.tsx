@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import { Search } from "lucide-react";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { ResultRow, SourceOutcomes } from "@/components/results";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Button } from "@meldgrove/ui/button";

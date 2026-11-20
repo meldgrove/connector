@@ -7,6 +7,7 @@ import type {
   SearchResponse,
 } from "@connector/shared/api/search";
 import type { SourceSummary } from "@connector/shared/api/sources";
+import type { SearchResult as FrameResult } from "@meldgrove/ui/app-frame";
 import { api } from "@/lib/api";
 
 /** The sources the signed-in person may use. */
@@ -28,6 +29,26 @@ export function useSearch(q: string, sources: string[]) {
       api.get<SearchResponse>("/search", { q, sources: sources.join(",") || undefined, limit: 30 }, signal),
     enabled: q.length > 0,
     placeholderData: keepPreviousData,
+  });
+}
+
+/** An address in another app: results link to the app that holds them. */
+export function isAppAddress(href: string): boolean {
+  return /^https?:\/\//i.test(href);
+}
+
+/**
+ * The search of the app frame: items of every source the person may use
+ * (the server asks only those, and each source applies its own rules). Each
+ * result opens in its app.
+ */
+export async function findItems(query: string, signal: AbortSignal): Promise<FrameResult[]> {
+  const { results } = await api.get<SearchResponse>("/search", { q: query, limit: 8 }, signal);
+  const seen = new Set<string>();
+  return results.flatMap((result) => {
+    if (!isAppAddress(result.url) || seen.has(result.url)) return [];
+    seen.add(result.url);
+    return [{ href: result.url, title: result.title, kind: result.source.name }];
   });
 }
 

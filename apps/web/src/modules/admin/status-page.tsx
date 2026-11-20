@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { Bot, CircleCheck, CircleX, Network, Plus, RefreshCw, TriangleAlert, Unplug } from "lucide-react";
 import type { AdminStatus, Problem, SourceHealth } from "@connector/shared/api/status";
 import { SOURCE_KINDS, SOURCE_KIND_INFO } from "@connector/shared/sources";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { SourceStateBadge } from "@/components/source-state";
 import { ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Badge } from "@meldgrove/ui/badge";

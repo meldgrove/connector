@@ -4,16 +4,19 @@ import { toast } from "sonner";
 import { Bot, CircleCheck, CircleX, KeyRound, Link2, Plus, UsersRound } from "lucide-react";
 import type { ConnectedApp, Token } from "@connector/shared/api/tokens";
 import { ConfirmDialog } from "@meldgrove/ui/confirm-dialog";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Alert, AlertDescription, AlertTitle } from "@meldgrove/ui/alert";
 import { Badge } from "@meldgrove/ui/badge";
 import { Button } from "@meldgrove/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@meldgrove/ui/card";
+import { AboutCard, AppearanceCard, KeyboardShortcutsCard } from "@meldgrove/ui/settings-cards";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@meldgrove/ui/table";
 import { useT } from "@/i18n";
 import { errorMessage } from "@/lib/api";
 import { useFormatter } from "@/lib/format";
+import { REPOSITORY_URL } from "@/lib/repository";
+import { useTheme } from "@/lib/theme";
 import { useMaybeMe } from "@/hooks/use-me";
 import { useSources } from "@/modules/search/api";
 import {
@@ -341,6 +344,7 @@ function AppsCard() {
 
 export function SettingsPage(props: { linked?: string; linkError?: string }) {
   const t = useT(messages);
+  const { theme, setTheme } = useTheme();
   const sources = useSources();
   const linkedName = props.linked
     ? (sources.data?.items.find((source) => source.slug === props.linked)?.name ?? props.linked)
@@ -376,6 +380,10 @@ export function SettingsPage(props: { linked?: string; linkError?: string }) {
       <LinksCard />
       <TokensCard />
       <GroupsCard />
+      <AppearanceCard value={theme} onChange={setTheme} />
+      <KeyboardShortcutsCard />
+      {/* The software's name, also when an installation renames the app. */}
+      <AboutCard appName="Connector" repositoryUrl={REPOSITORY_URL} />
     </Page>
   );
 }

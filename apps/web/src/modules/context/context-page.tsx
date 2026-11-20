@@ -1,7 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { createRoute, type AnyRoute } from "@tanstack/react-router";
 import { Info, Sparkles } from "lucide-react";
-import { Page, PageHeader } from "@/components/layout/page";
+import { Page, PageHeader } from "@meldgrove/ui/page";
 import { ResultRow, SourceOutcomes } from "@/components/results";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Alert, AlertDescription } from "@meldgrove/ui/alert";

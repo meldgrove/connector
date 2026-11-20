@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
-export const THEMES = ["system", "light", "dark"] as const;
-export type Theme = (typeof THEMES)[number];
+export type Theme = "system" | "light" | "dark";
 
 type ThemeState = { theme: Theme; resolved: "light" | "dark"; setTheme: (theme: Theme) => void };
 

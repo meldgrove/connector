@@ -6,8 +6,10 @@ what you may see in each app.
 
 ## Searching
 
-Type into the search box on the home page or under **Search**. Connector
-asks every source you may use at once and shows:
+**Search** at the top of the sidebar (Ctrl+K or ⌘K, or `/`) finds items
+as you type; a result opens in its app, in a new tab. **Show all results**
+there, the search box on the overview and **Search** in the sidebar lead to
+the search page. It asks every source you may use at once and shows:
 
 - each result's source, type (page, decision, note, contact, …) and date;
 - its level in the **source order**, which decides when sources disagree:
@@ -17,6 +19,12 @@ asks every source you may use at once and shows:
 
 Open a result in its app, or **Preview** it here. Filter by source with the
 chips above the results. When a source does not answer, the page says so.
+
+**Keys:** G then O opens the overview, G then S the search page, G then C
+Context, G then P People and G then A how to connect an agent. Ctrl+/ lists
+every shortcut. Shortcuts with single letters can be turned off under
+**Settings**, which also has the appearance (light, dark or the device's
+setting).
 
 ## Context
 
