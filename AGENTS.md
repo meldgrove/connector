@@ -32,7 +32,7 @@ apps/server/src/
   config.ts        every environment variable (zod); read only via config()
   db/schema/       Drizzle schema (auth.ts, app.ts)
   auth/            Better Auth, sign-in check and groups, credentials (tokens), principals
-  sources/         sources (service.ts), source use (use.ts), one adapter per kind, the index, webhooks, linked accounts
+  sources/         sources (service.ts), source use (use.ts), source health (health.ts), one adapter per kind, the index, webhooks, linked accounts
   search/          federation: search, fetch, context, recent, activity log
   directory/       groups, Keycloak directory sync, people directory
   scim/            SCIM 2.0 server

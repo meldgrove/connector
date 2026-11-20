@@ -14,8 +14,8 @@ import { idParam, jsonBody, requireAdmin, requireWebUser } from "../http/middlew
 import { logger } from "../logger";
 import { handbookSpaces } from "../sources/handbook";
 import { finishLink, mayLink, startLink, unlink } from "../sources/links";
+import { checkSource } from "../sources/health";
 import {
-  checkSource,
   createSource,
   deleteSource,
   getSource,

@@ -2,9 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { eq } from "drizzle-orm";
 import type { AdminStatus } from "@connector/shared/api/status";
 import { getDb } from "../db/client";
-import { activity, credentials, items, oauthClients, oauthGrants, sources } from "../db/schema";
+import { activity, credentials, oauthClients, oauthGrants, sources } from "../db/schema";
 import { putSetting } from "../core/settings";
-import { checkLiveSources } from "../sources/service";
 import { bearerOf, startFakeApp, type FakeApp } from "../test/fake-app";
 import {
   createAdminToken,
@@ -59,14 +58,9 @@ describe("admin status", () => {
     expect((await request("GET", "/api/v1/admin/status", { userId: admin.id })).status).toBe(200);
   });
 
-  it("tells how each source is doing and what needs an admin", async () => {
+  it("brings the sources, the directory, SCIM, tokens and agents together, errors first", async () => {
     const admin = await createUser({ isAdmin: true });
-    const noToken = await createSource({
-      kind: "handbook",
-      slug: "handbook",
-      name: "Handbook",
-      config: { baseUrl: handbook.url, ruleSpaces: [], allowLinking: true },
-    });
+    // Source health (sources/health.int.test.ts) reaches the page: a failing CRM and a Logbook that waits.
     const crm = await createSource({
       kind: "crm",
       name: "CRM",
@@ -83,45 +77,6 @@ describe("admin status", () => {
       config: { baseUrl: "https://logbook.example.org" },
       secret: { webhookSecret: "a-long-enough-webhook-secret" },
     });
-    const library = await createSource({
-      kind: "library",
-      name: "Library",
-      config: { baseUrl: "https://library.example.org", teamGroupPrefix: null },
-      secret: { webhookSecret: "a-long-enough-webhook-secret" },
-    });
-    await getDb()
-      .update(sources)
-      .set({
-        lastDeliveryAt: minutesAgo(10),
-        status: { at: minutesAgo(10).toISOString(), ok: true, message: "Received LIB-1" },
-      })
-      .where(eq(sources.id, library.id));
-    for (const externalId of ["n1", "n2"]) {
-      await getDb().insert(items).values({
-        sourceId: library.id,
-        externalId,
-        type: "note",
-        title: externalId,
-        url: "https://library.example.org/n/1",
-      });
-    }
-    const off = await createSource({
-      kind: "crm",
-      slug: "old-crm",
-      name: "Old CRM",
-      config: { baseUrl: "https://old.example.org", types: ["contact"] },
-      enabled: false,
-    });
-    const unreadable = await createSource({
-      kind: "handbook",
-      slug: "wiki",
-      name: "Wiki",
-      config: { baseUrl: "https://wiki.example.org", ruleSpaces: [], allowLinking: false },
-    });
-    await getDb()
-      .update(sources)
-      .set({ secretEncrypted: "not-encrypted" })
-      .where(eq(sources.id, unreadable.id));
 
     // People whose address clashed, tokens that end, and a failed SCIM request.
     await createUser({ email: "conflict-1@conflict.invalid" });
@@ -141,7 +96,7 @@ describe("admin status", () => {
       message: "PATCH /Groups failed (HTTP 400): A member is not a known user",
     });
 
-    // Agents: two people connected Claude; one used a token this week.
+    // Agents: two people connected Claude; one used a token this week, once with a failure.
     const rita = await createUser({ name: "Rita" });
     const [client] = await getDb()
       .insert(oauthClients)
@@ -163,63 +118,29 @@ describe("admin status", () => {
         });
     }
     await createToken(rita.id);
-    await getDb()
-      .insert(activity)
-      .values({
-        userId: rita.id,
-        actor: "Rita",
-        channel: "oauth",
-        client: "Claude",
-        action: "search",
-        query: "trains",
-        results: 2,
-        sources: [{ slug: "library", ok: true, count: 2 }],
-      });
+    for (const ok of [true, false]) {
+      await getDb()
+        .insert(activity)
+        .values({
+          userId: rita.id,
+          actor: "Rita",
+          channel: "oauth",
+          client: "Claude",
+          action: "search",
+          query: "trains",
+          results: ok ? 2 : 0,
+          sources: [{ slug: "library", ok, count: ok ? 2 : 0 }],
+        });
+    }
 
     const body = await status(admin.id);
-    const bySlug = Object.fromEntries(body.sources.map((source) => [source.slug, source]));
-    expect(bySlug.handbook).toMatchObject({ state: "setup", delivery: "live" });
-    expect(bySlug.crm).toMatchObject({ state: "failing", status: { ok: false } });
-    expect(bySlug.logbook).toMatchObject({ state: "waiting", delivery: "webhook", items: 0 });
-    expect(bySlug.library).toMatchObject({
-      state: "ok",
-      items: 2,
-      requests: { total: 1, failed: 0, lastError: null },
-    });
-    expect(bySlug["old-crm"]).toMatchObject({ state: "off" });
-    expect(bySlug.wiki).toMatchObject({ state: "setup" });
-    // The source order: Handbook first, the Library last.
-    expect(body.sources.map((source) => source.kind)).toEqual([
-      "handbook",
-      "handbook",
-      "logbook",
-      "crm",
-      "crm",
-      "library",
+    expect(body.sources.map((source) => [source.slug, source.state])).toEqual([
+      ["logbook", "waiting"],
+      ["crm", "failing"],
     ]);
-
     const problems = Object.fromEntries(body.problems.map((problem) => [problem.key, problem]));
-    expect(problems[`source:${noToken.id}`]).toMatchObject({
-      severity: "warning",
-      title: "Handbook has no service token",
-      area: "source",
-      sourceId: noToken.id,
-    });
-    expect(problems[`source:${crm.id}`]).toMatchObject({
-      severity: "error",
-      title: "CRM is failing",
-      detail: "CRM refused the credentials",
-    });
-    expect(problems[`source:${logbook.id}`]).toMatchObject({
-      severity: "warning",
-      title: "Waiting for the first delivery from Logbook",
-    });
-    expect(problems[`source:${unreadable.id}`]).toMatchObject({
-      severity: "error",
-      title: "Connector cannot read the credentials of Wiki",
-    });
-    expect(problems[`source:${library.id}`]).toBeUndefined();
-    expect(problems[`source:${off.id}`]).toBeUndefined();
+    expect(problems[`source:${crm.id}`]).toMatchObject({ severity: "error", title: "CRM is failing" });
+    expect(problems[`source:${logbook.id}`]).toMatchObject({ severity: "warning", area: "source" });
     expect(problems["people:conflicts"]).toMatchObject({ area: "people", severity: "warning" });
     expect(Object.values(problems).find((p) => p.title.includes("Support Agent"))).toMatchObject({
       severity: "warning",
@@ -238,172 +159,17 @@ describe("admin status", () => {
     const severities = body.problems.map((problem) => problem.severity);
     expect(severities).toEqual([...severities].sort());
 
+    expect(body.sourceChecks).toMatchObject({ minutes: 15 });
     expect(body.scim).toMatchObject({ tokens: 0, lastError: { ok: false } });
     expect(body.agents).toMatchObject({
       apps: [{ name: "Claude", people: 2 }],
       personalTokens: 1,
       serviceTokens: 1,
-      week: { requests: 1, failed: 0, people: 1, bots: 0 },
+      week: { requests: 2, failed: 1, people: 1, bots: 0 },
     });
     expect(body.directory).toMatchObject({ mode: "oidc", people: 3, groups: 0 });
     expect(JSON.stringify(body)).not.toContain("crm_key");
     expect(JSON.stringify(body)).not.toContain("a-long-enough-webhook-secret");
-  });
-
-  it("notices a source that fails an agent's fetch", async () => {
-    const admin = await createUser({ isAdmin: true });
-    const rita = await createUser({ name: "Rita" });
-    await createSource({
-      kind: "handbook",
-      config: { baseUrl: handbook.url, ruleSpaces: [], allowLinking: false },
-      secret: { serviceToken: "hb_wrong" },
-    });
-    const id = encodeURIComponent("handbook:page:0b7c1f2e-8a4d-4c3b-9e5f-1a2b3c4d5e6f");
-    const fetched = await request("GET", `/api/v1/items/${id}`, { token: await createToken(rita.id) });
-    expect(fetched.status).toBe(502);
-    const [logged] = await getDb().select().from(activity);
-    expect(logged).toMatchObject({
-      action: "fetch",
-      results: 0,
-      sources: [{ slug: "handbook", ok: false, count: 0, error: "Handbook refused the credentials" }],
-    });
-    expect((await status(admin.id)).sources[0]).toMatchObject({
-      state: "failing",
-      requests: { total: 1, failed: 1, lastError: { message: "Handbook refused the credentials" } },
-    });
-  });
-
-  it("logs a failed proposal without counting it against the source", async () => {
-    const admin = await createUser({ isAdmin: true });
-    const rita = await createUser({ name: "Rita" });
-    await createSource({
-      kind: "handbook",
-      config: { baseUrl: handbook.url, ruleSpaces: [], allowLinking: false },
-      secret: { serviceToken: "hb_right" },
-    });
-    // Rita has no linked account: the proposal fails before Handbook is asked.
-    const proposal = {
-      title: "New page",
-      description: "The VPN has no page yet",
-      newPage: { space: "it", path: "vpn", title: "VPN", body: "How to connect" },
-    };
-    const proposed = await request("POST", "/api/v1/proposals", {
-      token: await createToken(rita.id),
-      body: proposal,
-    });
-    expect(proposed.status).toBe(409);
-    const [logged] = await getDb().select().from(activity);
-    expect(logged).toMatchObject({
-      action: "propose",
-      results: 0,
-      sources: [
-        {
-          slug: "handbook",
-          ok: false,
-          error:
-            "Link your Handbook account first: open Connector, Settings → Linked accounts (the agent proposes as you)",
-        },
-      ],
-    });
-    expect((await status(admin.id)).sources[0]).toMatchObject({ state: "unchecked", requests: { total: 0 } });
-  });
-
-  it("notices sources that fail agents' requests, until a request works again", async () => {
-    const admin = await createUser({ isAdmin: true });
-    const rita = await createUser({ name: "Rita" });
-    const source = await createSource({
-      kind: "handbook",
-      config: { baseUrl: handbook.url, ruleSpaces: [], allowLinking: false },
-      secret: { serviceToken: "hb_wrong" },
-    });
-    const token = await createToken(rita.id);
-    expect((await request("GET", "/api/v1/search?q=vpn", { token })).status).toBe(200);
-    const [logged] = await getDb().select().from(activity);
-    expect(logged!.sources).toEqual([
-      // Connector's words only: the app's own error text is not kept.
-      { slug: "handbook", ok: false, count: 0, error: "Handbook refused the credentials" },
-    ]);
-
-    let body = await status(admin.id);
-    expect(body.sources[0]).toMatchObject({
-      state: "failing",
-      requests: {
-        total: 1,
-        failed: 1,
-        lastError: { message: "Handbook refused the credentials" },
-      },
-    });
-    expect(body.problems[0]).toMatchObject({
-      key: `source:${source.id}`,
-      severity: "error",
-      title: "handbook failed its latest requests",
-    });
-    expect(body.agents.week).toMatchObject({ requests: 1, failed: 1 });
-
-    // The admin fixes the token. A working check alone does not clear it (it may
-    // test another path); the next request that works does.
-    await request("PATCH", `/api/v1/admin/sources/${source.id}`, {
-      userId: admin.id,
-      body: { secret: { serviceToken: "hb_right" } },
-    });
-    expect(
-      (await request("POST", `/api/v1/admin/sources/${source.id}/check`, { userId: admin.id })).body,
-    ).toMatchObject({ ok: true });
-    expect((await status(admin.id)).sources[0]).toMatchObject({ state: "failing" });
-    expect((await request("GET", "/api/v1/search?q=vpn", { token })).status).toBe(200);
-    body = await status(admin.id);
-    expect(body.sources[0]).toMatchObject({ state: "ok", requests: { total: 2, failed: 1 } });
-    expect(body.problems.find((problem) => problem.key === `source:${source.id}`)).toBeUndefined();
-
-    // A new source with the same short name starts without the old one's requests.
-    await getDb()
-      .update(activity)
-      .set({ sources: [{ slug: "handbook", ok: false, count: 0 }] });
-    await request("DELETE", `/api/v1/admin/sources/${source.id}`, { userId: admin.id });
-    await createSource({
-      kind: "handbook",
-      config: { baseUrl: handbook.url, ruleSpaces: [], allowLinking: false },
-      secret: { serviceToken: "hb_right" },
-    });
-    body = await status(admin.id);
-    expect(body.sources[0]).toMatchObject({ state: "unchecked", requests: { total: 0, failed: 0 } });
-  });
-
-  it("the worker checks live sources and leaves webhook sources alone", async () => {
-    const admin = await createUser({ isAdmin: true });
-    const good = await createSource({
-      kind: "handbook",
-      config: { baseUrl: handbook.url, ruleSpaces: ["purpose"], allowLinking: true },
-      secret: { serviceToken: "hb_right" },
-    });
-    const bad = await createSource({
-      kind: "handbook",
-      slug: "other",
-      config: { baseUrl: handbook.url, ruleSpaces: [], allowLinking: true },
-      secret: { serviceToken: "hb_revoked" },
-    });
-    const logbook = await createSource({
-      kind: "logbook",
-      config: { baseUrl: "https://logbook.example.org" },
-    });
-    expect(await checkLiveSources(getDb())).toBe(2);
-    const rows = Object.fromEntries((await getDb().select().from(sources)).map((row) => [row.id, row]));
-    expect(rows[good.id]!.status).toMatchObject({ ok: true, message: "Reached Handbook: 2 spaces" });
-    expect(rows[bad.id]!.status).toMatchObject({
-      ok: false,
-      message: "Handbook refused the credentials: Unknown token",
-    });
-    expect(rows[logbook.id]!.status).toBeNull();
-    const body = await status(admin.id);
-    expect(body.sourceChecks).toMatchObject({ minutes: 15 });
-    expect(Date.now() - Date.parse(body.sourceChecks.lastRunAt!)).toBeLessThan(60_000);
-    expect(body.problems.find((problem) => problem.key === "worker")).toBeUndefined();
-
-    // Checks that stopped long ago point at the worker.
-    await putSetting(getDb(), "source_checks", { at: minutesAgo(120).toISOString() });
-    expect((await status(admin.id)).problems.find((problem) => problem.key === "worker")).toMatchObject({
-      title: "The worker seems to be stopped",
-    });
   });
 
   it("lists Handbook's spaces for choosing the rule spaces", async () => {

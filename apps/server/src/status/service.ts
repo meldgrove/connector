@@ -1,36 +1,19 @@
 import { and, count, desc, eq, inArray, isNull, like, or, gt, sql } from "drizzle-orm";
-import type { AdminStatus, Problem, SourceHealth, SourceState } from "@connector/shared/api/status";
-import { SOURCE_KIND_INFO } from "@connector/shared/sources";
+import type { AdminStatus, Problem } from "@connector/shared/api/status";
 import { config } from "../config";
 import type { Db } from "../db/client";
-import {
-  activity,
-  credentials,
-  groups,
-  items,
-  oauthClients,
-  oauthGrants,
-  sources,
-  users,
-} from "../db/schema";
+import { activity, credentials, groups, oauthClients, oauthGrants, users } from "../db/schema";
 import { getSetting } from "../core/settings";
 import { notRemoved } from "../people/lifecycle";
 import { CONFLICT_EMAIL_DOMAIN, directoryStatus } from "../directory/sync";
 import { SCIM_LAST_ERROR, SCIM_LAST_REQUEST } from "../scim/routes";
-import {
-  inSourceOrder,
-  isWebhookKind,
-  kindOf,
-  secretOf,
-  secretState,
-  SOURCE_CHECKS_SETTING,
-} from "../sources/service";
-import type { SourceRow } from "../sources/types";
+import { sourcesHealth } from "../sources/health";
 
 /*
- * The admin status page (GET /admin/status): how every source, the
- * directory, SCIM and the agents are doing, and the problems that need an
- * admin. Everything is read from the database; nothing calls the apps.
+ * The admin status page (GET /admin/status): how every source (source
+ * health, `sources/health.ts`), the directory, SCIM and the agents are
+ * doing, and the problems that need an admin. Everything is read from the
+ * database; nothing calls the apps.
  */
 
 const MINUTE = 60_000;
@@ -42,210 +25,13 @@ const isoOfMs = (value: unknown) => (typeof value === "number" ? new Date(value)
 const iso = (value: Date | null | undefined) => (value ? value.toISOString() : null);
 const msOf = (value: string | null | undefined) => (value ? Date.parse(value) : 0);
 
-type Requests = {
-  total: number;
-  failed: number;
-  lastOkAt: number;
-  lastFailedAt: number;
-  lastError: string | null;
-};
-
-/**
- * Requests of agents and bots per source slug in the last 24 hours (the
- * activity log), since the current source with that slug was created.
- * Reads only: a proposal that fails says more about the proposal (a page
- * that moved, no linked account) than about the source.
- */
-async function requestsBySlug(db: Db): Promise<Map<string, Requests>> {
-  const { rows } = await db.execute<{
-    slug: string;
-    total: number;
-    failed: number;
-    last_ok_ms: number | null;
-    last_failed_ms: number | null;
-    last_error: string | null;
-  }>(sql`
-    select s->>'slug' as slug,
-           count(*)::int as total,
-           (count(*) filter (where (s->>'ok')::boolean is false))::int as failed,
-           (extract(epoch from max(a.created_at) filter (where (s->>'ok')::boolean)) * 1000)::float8 as last_ok_ms,
-           (extract(epoch from max(a.created_at) filter (where (s->>'ok')::boolean is false)) * 1000)::float8
-             as last_failed_ms,
-           (array_agg(s->>'error' order by a.created_at desc) filter (where (s->>'ok')::boolean is false))[1]
-             as last_error
-    from ${activity} a
-      cross join lateral jsonb_array_elements(a.sources) s
-      join ${sources} src on src.slug = s->>'slug' and a.created_at >= src.created_at
-    where a.created_at > now() - interval '24 hours' and a.action <> 'propose'
-    group by 1`);
-  return new Map(
-    rows.map((row) => [
-      row.slug,
-      {
-        total: row.total,
-        failed: row.failed,
-        lastOkAt: row.last_ok_ms ?? 0,
-        lastFailedAt: row.last_failed_ms ?? 0,
-        lastError: row.last_error,
-      },
-    ]),
-  );
-}
-
-type SourceVerdict = { state: SourceState; problem: Omit<Problem, "key" | "area" | "sourceId"> | null };
-
-/** A source's state and the problem it has, the most urgent first. */
-function judgeSource(row: SourceRow, requests: Requests | undefined): SourceVerdict {
-  const kind = kindOf(row);
-  const name = row.name;
-  const app = SOURCE_KIND_INFO[kind].label;
-  if (!row.enabled) return { state: "off", problem: null };
-  const secrets = secretState(row);
-  if (secrets === "unreadable") {
-    return {
-      state: "setup",
-      problem: {
-        severity: "error",
-        title: `Connector cannot read the credentials of ${name}`,
-        detail: "ENCRYPTION_KEY changed since they were saved. Enter them again.",
-      },
-    };
-  }
-  const secret = secrets === "ok" ? secretOf(row) : {};
-  const has = (key: string) => typeof secret[key] === "string" && secret[key] !== "";
-  if (kind === "crm" && !has("apiKey")) {
-    return {
-      state: "setup",
-      problem: {
-        severity: "error",
-        title: `${name} has no API key`,
-        detail: "Create one in the CRM and add it here; until then the CRM is not searched.",
-      },
-    };
-  }
-  if (kind === "handbook" && !has("serviceToken")) {
-    const linking = row.config.allowLinking !== false;
-    return {
-      state: "setup",
-      problem: {
-        severity: linking ? "warning" : "error",
-        title: `${name} has no service token`,
-        detail: linking
-          ? "Only people who linked their Handbook account get its pages; bots get none."
-          : "Nobody gets its pages until an admin adds a service token from Handbook.",
-      },
-    };
-  }
-  const webhook = isWebhookKind(kind);
-  if (webhook && !has("webhookSecret")) {
-    return {
-      state: "setup",
-      problem: {
-        severity: "error",
-        title: `${name} has no webhook secret`,
-        detail: `Connector refuses deliveries from ${app} until both sides share a secret.`,
-      },
-    };
-  }
-  if (row.status && !row.status.ok) {
-    return {
-      state: "failing",
-      problem: { severity: "error", title: `${name} is failing`, detail: row.status.message },
-    };
-  }
-  // The latest request of an agent or bot failed: failing until a request works
-  // again, whatever a check says (a check may test another path, e.g. the
-  // service token instead of linked accounts). Earlier failures only count.
-  if (requests && requests.failed > 0 && requests.lastFailedAt > requests.lastOkAt) {
-    return {
-      state: "failing",
-      problem: {
-        severity: "error",
-        title: `${name} failed its latest requests`,
-        detail: `${requests.failed} of ${requests.total} requests of agents and bots failed in the last 24 hours${
-          requests.lastError ? `; the last one: ${requests.lastError}` : ""
-        }. This clears with the next request that works.`,
-      },
-    };
-  }
-  if (webhook && !row.lastDeliveryAt) {
-    return {
-      state: "waiting",
-      problem: {
-        severity: "warning",
-        title: `Waiting for the first delivery from ${name}`,
-        detail: `Set WEBHOOK_URL and WEBHOOK_SECRET in ${app} and restart it. It delivers when something is published or changed there, and everything at its first nightly run (02:30).`,
-      },
-    };
-  }
-  if (!webhook && !row.status) return { state: "unchecked", problem: null };
-  return { state: "ok", problem: null };
-}
-
 const TOKEN_LABEL = { service: "service token", scim: "SCIM token" } as const;
 
 export async function adminStatus(db: Db): Promise<AdminStatus> {
   const now = Date.now();
-  const problems: Problem[] = [];
-
-  // Sources.
-  const rows = inSourceOrder(await db.select().from(sources));
-  const counted = await db
-    .select({ sourceId: items.sourceId, value: count() })
-    .from(items)
-    .groupBy(items.sourceId);
-  const itemCounts = new Map(counted.map((row) => [row.sourceId, row.value]));
-  const requests = await requestsBySlug(db);
-  const sourceHealth: SourceHealth[] = rows.map((row) => {
-    const kind = kindOf(row);
-    const webhook = isWebhookKind(kind);
-    const used = requests.get(row.slug);
-    const verdict = judgeSource(row, used);
-    if (verdict.problem) {
-      problems.push({ key: `source:${row.id}`, area: "source", sourceId: row.id, ...verdict.problem });
-    }
-    return {
-      id: row.id,
-      slug: row.slug,
-      name: row.name,
-      kind,
-      enabled: row.enabled,
-      delivery: webhook ? "webhook" : "live",
-      state: verdict.state,
-      status: row.status ?? null,
-      items: webhook ? (itemCounts.get(row.id) ?? 0) : null,
-      lastDeliveryAt: iso(row.lastDeliveryAt),
-      requests: {
-        total: used?.total ?? 0,
-        failed: used?.failed ?? 0,
-        lastError:
-          used?.lastError && used.lastFailedAt
-            ? { at: new Date(used.lastFailedAt).toISOString(), message: used.lastError }
-            : null,
-      },
-    };
-  });
-
-  // The worker: its source checks show that it runs.
-  const checkMinutes = config().SOURCE_CHECK_MINUTES || null;
-  const checks = await getSetting(db, SOURCE_CHECKS_SETTING);
-  const lastRunAt = typeof checks?.at === "string" ? checks.at : null;
-  if (checkMinutes) {
-    const late = (3 * checkMinutes + 5) * MINUTE;
-    const stale = lastRunAt ? now - msOf(lastRunAt) > late : process.uptime() * 1000 > late;
-    if (stale) {
-      problems.push({
-        key: "worker",
-        area: "source",
-        sourceId: null,
-        severity: "warning",
-        title: "The worker seems to be stopped",
-        detail: `It checks the live sources every ${checkMinutes} minutes, but ${
-          lastRunAt ? "the last check is much older" : "it has not checked them yet"
-        }. Check that the worker process runs.`,
-      });
-    }
-  }
+  // Sources, and the worker's checks of them.
+  const health = await sourcesHealth(db);
+  const problems: Problem[] = [...health.problems];
 
   // Directory.
   const directory = await directoryStatus(db);
@@ -439,8 +225,8 @@ export async function adminStatus(db: Db): Promise<AdminStatus> {
   problems.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "error" ? -1 : 1));
   return {
     problems,
-    sources: sourceHealth,
-    sourceChecks: { minutes: checkMinutes, lastRunAt },
+    sources: health.sources,
+    sourceChecks: health.sourceChecks,
     directory: {
       mode: directory.mode,
       syncMinutes: directory.syncMinutes,

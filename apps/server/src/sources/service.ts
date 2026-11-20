@@ -1,12 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { asc, count, eq, max, sql } from "drizzle-orm";
-import type {
-  Source,
-  SourceCheck,
-  SourceCreate,
-  SourceSummary,
-  SourceUpdate,
-} from "@connector/shared/api/sources";
+import type { Source, SourceCreate, SourceSummary, SourceUpdate } from "@connector/shared/api/sources";
 import { SOURCE_KIND_INFO, type SourceKind } from "@connector/shared/sources";
 import { config } from "../config";
 import type { Db } from "../db/client";
@@ -14,13 +8,12 @@ import { items, linkRequests, sourceLinks, sources } from "../db/schema";
 import type { Principal, UserPrincipal } from "../auth/principal";
 import { decryptJson, encryptJson, secretHint, SecretDecryptionError } from "../core/crypto";
 import { audit } from "../core/audit";
-import { putSetting } from "../core/settings";
 import { inAnyGroup } from "../directory/groups";
 import { conflict, notFound, validationError, zodFieldErrors } from "../http/errors";
 import { logger } from "../logger";
+import { lastCheckOrDeliveryOk } from "./health";
 import { KINDS, isSourceKind } from "./registry";
 import type { SourceRow } from "./types";
-import { administerSource } from "./use";
 
 /*
  * Sources: connected apps, their settings and secrets, and who may use
@@ -306,52 +299,6 @@ export async function rotateWebhookSecret(
   return { webhookSecret, createdAt: new Date(after!.ms).toISOString() };
 }
 
-/**
- * A status `{ at, ok, message }` stamped with the database's time, like
- * deliveries and webhook secrets, so the setup guide compares one clock.
- */
-const statusNow = (ok: boolean, message: string) =>
-  sql`jsonb_build_object('at', to_char(now() at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'), 'ok', ${ok}::boolean, 'message', ${message.slice(0, 300)}::text)`;
-
-export async function recordStatus(db: Db, id: string, ok: boolean, message: string) {
-  await db
-    .update(sources)
-    .set({ status: statusNow(ok, message) })
-    .where(eq(sources.id, id));
-}
-
-/** A check uses only the source's own credentials (service token, API key), never a person's. */
-async function runCheck(db: Db, row: SourceRow): Promise<SourceCheck> {
-  const use = await administerSource(db, row, (adapter, context) => adapter.check(context), "check");
-  const result: SourceCheck = use.ok
-    ? { ok: true, message: use.value }
-    : { ok: false, message: use.error.message };
-  await recordStatus(db, row.id, result.ok, result.message);
-  return result;
-}
-
-/** Checks a source's address and credentials and stores the outcome. */
-export async function checkSource(db: Db, id: string): Promise<SourceCheck> {
-  return runCheck(db, await getSource(db, id));
-}
-
-/**
- * Checks every enabled live source (SOURCE_CHECK_MINUTES), so a refused
- * token or an app that is down shows on the status page before people
- * notice. Webhook sources report through their deliveries instead.
- */
-export async function checkLiveSources(db: Db): Promise<number> {
-  const rows = (await db.select().from(sources).where(eq(sources.enabled, true))).filter(
-    (row) => !isWebhookKind(row.kind),
-  );
-  await Promise.all(rows.map((row) => runCheck(db, row)));
-  await putSetting(db, SOURCE_CHECKS_SETTING, { at: new Date().toISOString() });
-  return rows.length;
-}
-
-/** Settings key: when the worker last checked the live sources. */
-export const SOURCE_CHECKS_SETTING = "source_checks";
-
 /** Whether a caller may use a source (enabled; open to them or to service tokens). */
 export function mayUse(principal: Principal, row: SourceRow): boolean {
   if (!row.enabled) return false;
@@ -386,17 +333,9 @@ export async function sourceSummaries(db: Db, principal: Principal): Promise<Sou
       holds: SOURCE_KIND_INFO[kind].holds,
       delivery: SOURCE_KIND_INFO[kind].delivery,
       url: String(row.config.baseUrl ?? ""),
-      ok: row.status ? row.status.ok : null,
+      ok: lastCheckOrDeliveryOk(row),
       linkable: kind === "handbook" && row.config.allowLinking !== false && principal.kind === "user",
       linked: links.some((link) => link.sourceId === row.id),
     };
   });
-}
-
-/** Marks a delivery: last delivery time and status. */
-export async function recordDelivery(db: Db, id: string, message: string) {
-  await db
-    .update(sources)
-    .set({ lastDeliveryAt: sql`now()`, status: statusNow(true, message) })
-    .where(eq(sources.id, id));
 }
