@@ -1,6 +1,6 @@
 import { count, eq, sql } from "drizzle-orm";
-import type { SourceCheck } from "@connector/shared/api/sources";
-import type { Problem, SourceHealth, SourceState } from "@connector/shared/api/status";
+import type { SourceCheck, SourceState } from "@connector/shared/api/sources";
+import type { Problem, SourceHealth } from "@connector/shared/api/status";
 import { SOURCE_KIND_INFO } from "@connector/shared/sources";
 import { config } from "../config";
 import type { Db } from "../db/client";
@@ -18,11 +18,11 @@ import { administerSource } from "./use";
  * activity log, and whether its credentials are there and readable. This
  * module records checks and deliveries, and judges all four signals.
  *
- * Two readers get two depths:
- * - `sourcesHealth` (the status page): every signal, a state per source and
- *   the problems that need an admin.
- * - `lastCheckOrDeliveryOk` (the home page and `list_sources`): the last
- *   check or delivery only; agents' reads and credentials do not count.
+ * One judgment, so "working" means the same everywhere, for two readers:
+ * - `sourcesHealth` (the status page): a state per source, the problems
+ *   that need an admin, agents' reads and the worker's checks.
+ * - `sourceStateJudge` (the home page and `list_sources`): the same state,
+ *   nothing more.
  */
 
 const MINUTE = 60_000;
@@ -320,12 +320,12 @@ export async function sourcesHealth(db: Db): Promise<{
 }
 
 /**
- * Whether a source's last check or delivery worked; null before the first
- * one. This is what people (the home page) and agents (`list_sources`) see.
- * It is narrower than `sourcesHealth`: agents' reads and missing
- * credentials do not count, so a source can be "failing" on the status page
- * while this still says it works.
+ * How sources are doing for people (the home page) and agents
+ * (`list_sources`): the state the status page shows, without the problems,
+ * which are for admins. Reads the activity log once; the judge it returns
+ * gives each source's state.
  */
-export function lastCheckOrDeliveryOk(row: SourceRow): boolean | null {
-  return row.status ? row.status.ok : null;
+export async function sourceStateJudge(db: Db): Promise<(row: SourceRow) => SourceState> {
+  const requests = await requestsBySlug(db);
+  return (row) => judgeSource(row, requests.get(row.slug)).state;
 }

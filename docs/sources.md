@@ -59,6 +59,9 @@ every 30 seconds:
 | Not checked yet            | A live source nobody checked yet.                                                 |
 | Off                        | Turned off.                                                                       |
 
+People see the same state of the sources they may use on their home page,
+and agents in `list_sources`; only admins see what needs fixing.
+
 Above them, **Needs attention** lists what needs an admin, with a link to
 fix each: failing sources, a stopped worker or Keycloak sync, failed SCIM
 requests, service and SCIM tokens that expire within 14 days, expired or

@@ -5,13 +5,7 @@ import { activity, items, sources } from "../db/schema";
 import { putSetting } from "../core/settings";
 import { bearerOf, startFakeApp, type FakeApp } from "../test/fake-app";
 import { createSource, createToken, createUser, request, resetDatabase } from "../test/helpers";
-import {
-  checkLiveSources,
-  checkSource,
-  lastCheckOrDeliveryOk,
-  recordDelivery,
-  sourcesHealth,
-} from "./health";
+import { checkLiveSources, checkSource, recordDelivery, sourcesHealth } from "./health";
 
 vi.mock("../auth/resolve", () => import("../test/resolve-mock"));
 
@@ -37,6 +31,14 @@ beforeAll(async () => {
 afterAll(() => handbook.close());
 
 const health = () => sourcesHealth(getDb());
+/** The state of each source as people (the home page) and agents (`list_sources`) see it. */
+const seen = async (who: { userId?: string; token?: string }): Promise<Record<string, string>> =>
+  Object.fromEntries(
+    (await request("GET", "/api/v1/sources", who)).body.items.map((item: { slug: string; state: string }) => [
+      item.slug,
+      item.state,
+    ]),
+  );
 const rowOf = async (id: string) => (await getDb().select().from(sources).where(eq(sources.id, id)))[0]!;
 const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000);
 
@@ -166,10 +168,14 @@ describe("source health", () => {
     expect(JSON.stringify(body)).not.toContain("crm_key");
     expect(JSON.stringify(body)).not.toContain("a-long-enough-webhook-secret");
 
-    // People and agents see the last check or delivery only.
-    expect(lastCheckOrDeliveryOk(await rowOf(crm.id))).toBe(false);
-    expect(lastCheckOrDeliveryOk(await rowOf(library.id))).toBe(true);
-    expect(lastCheckOrDeliveryOk(await rowOf(noToken.id))).toBeNull();
+    // People and agents see the same state of every source they may use.
+    expect(await seen({ userId: rita.id })).toEqual({
+      handbook: "setup",
+      wiki: "setup",
+      logbook: "waiting",
+      crm: "failing",
+      library: "ok",
+    });
   });
 
   it("records deliveries and refused deliveries in the database's time", async () => {
@@ -301,8 +307,8 @@ describe("source health", () => {
       severity: "error",
       title: "handbook failed its latest requests",
     });
-    // People and agents are not told: they see the last check only, and there is none yet.
-    expect(lastCheckOrDeliveryOk(await rowOf(source.id))).toBeNull();
+    // People and agents see what admins see.
+    expect(await seen({ token })).toEqual({ handbook: "failing" });
 
     // The admin fixes the token. A working check alone does not clear it (it may
     // test another path); the next request that works does.
@@ -312,10 +318,11 @@ describe("source health", () => {
     });
     expect(await checkSource(getDb(), source.id)).toMatchObject({ ok: true });
     expect((await health()).sources[0]).toMatchObject({ state: "failing" });
-    expect(lastCheckOrDeliveryOk(await rowOf(source.id))).toBe(true);
+    expect(await seen({ token })).toEqual({ handbook: "failing" });
     expect((await request("GET", "/api/v1/search?q=vpn", { token })).status).toBe(200);
     body = await health();
     expect(body.sources[0]).toMatchObject({ state: "ok", requests: { total: 2, failed: 1 } });
+    expect(await seen({ token })).toEqual({ handbook: "ok" });
     expect(body.problems.find((problem) => problem.key === `source:${source.id}`)).toBeUndefined();
 
     // A new source with the same short name starts without the old one's requests.

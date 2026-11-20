@@ -46,8 +46,8 @@ what webhook sources send, replaced on every change and deleted on removal.
   personal token, connected app) with their groups, or a service token.
 - **Source health**: how a source is doing (`sources/health.ts`), from its
   last check or delivery, agents' and bots' reads of it, and its
-  credentials. The status page gets every signal; people and agents see
-  only whether the last check or delivery worked.
+  credentials. Its state means the same on the status page, the home page
+  and in `list_sources`; only admins get the problems behind it.
 
 ## Processes
 
@@ -174,15 +174,16 @@ apps, including agents' and bots' reads of a source from the activity log:
 the last 24 hours, since the source with that slug was created, proposals
 left out.
 
-Two readers get two depths:
+One judgment gives every source a state (off, setup, failing, waiting,
+unchecked, ok, the first that applies). A source whose latest read failed
+stays failing until a read works again, whatever a check says. Two readers
+get it:
 
-- **The status page** (`sourcesHealth`): a state per source (off, setup,
-  failing, waiting, unchecked, ok, the first that applies) with the
-  problem that needs an admin, and whether the worker still checks. A
-  source whose latest read failed stays failing until a read works again,
-  whatever a check says.
-- **The home page and `list_sources`** (`lastCheckOrDeliveryOk`): whether
-  the last check or delivery worked, and nothing else.
+- **The status page** (`sourcesHealth`): the state with the problem that
+  needs an admin, and whether the worker still checks.
+- **The home page and `list_sources`** (`sourceStateJudge`, through
+  `GET /sources`): the same state of the sources the caller may use,
+  without the problems.
 
 ## Linked accounts
 

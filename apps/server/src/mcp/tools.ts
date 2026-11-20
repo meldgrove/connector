@@ -207,7 +207,7 @@ export function registerTools(server: McpServer, api: ApiClient) {
     {
       title: "List sources",
       description:
-        "The connected apps the person may use: what each holds, whether it works, and the source order that decides which wins.",
+        "The connected apps the person may use: what each holds, how it is doing (state: ok = working, failing, waiting = no delivery yet, setup = an admin must finish its setup, unchecked = not checked yet), and the source order that decides which wins.",
       inputSchema: {},
       annotations: READ,
     },
@@ -220,7 +220,7 @@ export function registerTools(server: McpServer, api: ApiClient) {
             name: source.name,
             holds: source.holds,
             description: source.description,
-            working: source.ok,
+            state: source.state,
             linkedAccount: source.linkable ? source.linked : null,
           })),
           sourceOrder: AUTHORITIES.map(

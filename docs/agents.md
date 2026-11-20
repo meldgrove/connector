@@ -36,7 +36,7 @@ ends its access at once.
 | `search`                  | Searches every source at once; results with `id`, `title`, `url`, `text`, source, type, level, date, status.                                            |
 | `fetch`                   | One item in full by its `id`: `id`, `title`, `text`, `url`, `metadata` (source, type, level, status, date, related items).                              |
 | `recent_changes`          | What changed in the last days, newest first.                                                                                                            |
-| `list_sources`            | The sources the person may use, whether they work, and the source order.                                                                                |
+| `list_sources`            | The sources the person may use, how each is doing (`state`, as on the status page), and the source order.                                               |
 | `find_people`             | Colleagues by name, email address, title or group.                                                                                                      |
 | `propose_handbook_change` | Proposes a Handbook change as the person (exact text replacements or a new page) and submits it for review. Needs a linked Handbook account.            |
 
