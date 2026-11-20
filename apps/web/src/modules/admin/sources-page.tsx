@@ -106,6 +106,8 @@ function WebhookDialog(props: { source: Source | null; onClose: () => void }) {
               <AlertDescription>{t("secretOnce")}</AlertDescription>
             </Alert>
             <SecretInput
+              // A new secret starts hidden, even when the one before was shown.
+              key={secret}
               id="webhook-secret"
               readOnly
               copyable

@@ -88,7 +88,8 @@ const HIDDEN = "•".repeat(16);
 
 /**
  * Lines for an app's environment (`NAME=value`), with one button that copies
- * them all. A line marked secret shows dots; the button copies its value.
+ * them all. A line marked secret shows dots; the button copies its value, and
+ * a hidden field below with the eye button shows it.
  */
 export function EnvBlock(props: {
   lines: [name: string, value: string, secret?: boolean][];
@@ -106,6 +107,11 @@ export function EnvBlock(props: {
         {shown}
       </pre>
       <CopyButton text={text} label={props.copyLabel} />
+      {props.lines
+        .filter(([, , secret]) => secret)
+        .map(([name, value]) => (
+          <CopyRow key={name} label={name} value={value} secret />
+        ))}
     </div>
   );
 }

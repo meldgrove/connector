@@ -177,6 +177,30 @@ describe("admin sources", () => {
     );
     expect(screen.getAllByRole("menuitem")).toHaveLength(4);
   });
+
+  it("shows a new webhook secret hidden, even after the one before was shown", async () => {
+    let n = 0;
+    routeFetch({
+      "GET /api/v1/admin/sources": { items: [logbook] },
+      [`POST /api/v1/admin/sources/${logbook.id}/webhook-secret`]: () => ({
+        webhookSecret: `secret-${++n}-1234567890`,
+        createdAt: "2026-11-19T11:30:00.000Z",
+      }),
+    });
+    renderAt("/admin/sources", AdminSourcesPage);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Webhook" }));
+    await user.click(screen.getByRole("button", { name: "Generate webhook secret" }));
+    const first = await screen.findByLabelText("WEBHOOK_SECRET");
+    expect(first).toHaveValue("secret-1-1234567890");
+    expect(first).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(first).toHaveAttribute("type", "text");
+
+    await user.click(screen.getByRole("button", { name: "Generate a new secret" }));
+    await waitFor(() => expect(screen.getByLabelText("WEBHOOK_SECRET")).toHaveValue("secret-2-1234567890"));
+    expect(screen.getByLabelText("WEBHOOK_SECRET")).toHaveAttribute("type", "password");
+  });
 });
 
 describe("setup guides", () => {
@@ -220,6 +244,12 @@ describe("setup guides", () => {
       "WEBHOOK_URL=https://connector.example.org/hooks/logbook WEBHOOK_SECRET=••••••••••••••••",
     );
     expect(screen.getByTestId("webhook-env")).not.toHaveTextContent("generated-secret");
+    // The eye button shows the secret on request.
+    const secretField = screen.getByLabelText("WEBHOOK_SECRET");
+    expect(secretField).toHaveAttribute("type", "password");
+    expect(secretField).toHaveValue("generated-secret-1234567890");
+    await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(secretField).toHaveAttribute("type", "text");
     await user.click(screen.getByRole("button", { name: "Copy both lines" }));
     await expect(navigator.clipboard.readText()).resolves.toBe(
       "WEBHOOK_URL=https://connector.example.org/hooks/logbook\nWEBHOOK_SECRET=generated-secret-1234567890",

@@ -109,6 +109,7 @@ test("an admin connects Logbook with its guide, and the guide sees the first del
   );
   await ada.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: APP });
   await ada.getByRole("button", { name: "Copy both lines" }).click();
+  await expect(ada.getByRole("button", { name: "Copied" })).toBeVisible();
   const env = await ada.evaluate(() => navigator.clipboard.readText());
   expect(env).toContain(`WEBHOOK_URL=${APP}/hooks/logbook`);
   webhookSecret = /WEBHOOK_SECRET=(\S+)/.exec(env)![1]!;
