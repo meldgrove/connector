@@ -1,24 +1,12 @@
 import { z } from "zod";
 import { idSchema } from "./common";
-import { sourceStatusSchema } from "./sources";
+import { sourceStateSchema, sourceStatusSchema } from "./sources";
 import { sourceKindSchema } from "../sources";
 
 /** Apps with a setup guide in the web app (Administration → Status). */
 export const SETUP_APPS = ["handbook", "logbook", "library", "crm", "iam", "support-agent"] as const;
 export const setupAppSchema = z.enum(SETUP_APPS);
 export type SetupApp = z.infer<typeof setupAppSchema>;
-
-/**
- * How a source is doing:
- * - ok: its last check or delivery worked;
- * - failing: its last check or delivery failed, or its latest requests did;
- * - waiting: a webhook source that has not delivered yet;
- * - setup: credentials are missing or cannot be read;
- * - unchecked: a live source not checked yet;
- * - off: turned off.
- */
-export const sourceStateSchema = z.enum(["ok", "failing", "waiting", "setup", "unchecked", "off"]);
-export type SourceState = z.infer<typeof sourceStateSchema>;
 
 export const sourceHealthSchema = z.object({
   id: idSchema,

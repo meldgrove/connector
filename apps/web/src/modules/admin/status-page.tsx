@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Bot, CircleCheck, CircleX, Network, Plus, RefreshCw, TriangleAlert, Unplug } from "lucide-react";
-import type { AdminStatus, Problem, SourceHealth, SourceState } from "@connector/shared/api/status";
+import type { AdminStatus, Problem, SourceHealth } from "@connector/shared/api/status";
 import { SOURCE_KINDS, SOURCE_KIND_INFO } from "@connector/shared/sources";
 import { Page, PageHeader } from "@/components/layout/page";
+import { SourceStateBadge } from "@/components/source-state";
 import { ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Badge } from "@meldgrove/ui/badge";
 import { Button } from "@meldgrove/ui/button";
@@ -26,27 +27,6 @@ import { cn } from "@meldgrove/ui/utils";
 import { kindLabel } from "@/modules/home/home-page";
 import { useAdminStatus, useCheckSource } from "./api";
 import { messages } from "./messages";
-
-const STATE_STYLE: Record<SourceState, string> = {
-  ok: "border-emerald-600/40 text-emerald-700 dark:text-emerald-300",
-  failing: "",
-  waiting: "border-amber-500/50 text-amber-700 dark:text-amber-300",
-  setup: "border-amber-500/50 text-amber-700 dark:text-amber-300",
-  unchecked: "text-muted-foreground",
-  off: "text-muted-foreground",
-};
-
-export function StateBadge({ state }: { state: SourceState }) {
-  const t = useT(messages);
-  return (
-    <Badge variant={state === "failing" ? "destructive" : "outline"} className={STATE_STYLE[state]}>
-      {state === "ok" ? <CircleCheck aria-hidden /> : null}
-      {state === "failing" ? <CircleX aria-hidden /> : null}
-      {state === "waiting" || state === "setup" ? <TriangleAlert aria-hidden /> : null}
-      {t(`state_${state}`)}
-    </Badge>
-  );
-}
 
 /** Where a source's guide is: its kind's guide, continuing the source. */
 const guideOf = (source: Pick<SourceHealth, "kind" | "id">) => ({
@@ -143,7 +123,7 @@ function SourceTile({ source }: { source: SourceHealth }) {
           <Badge variant="secondary">{kindLabel(source.kind)}</Badge>
         </CardTitle>
         <CardAction>
-          <StateBadge state={source.state} />
+          <SourceStateBadge state={source.state} />
         </CardAction>
       </CardHeader>
       <CardContent className="text-muted-foreground space-y-1 text-sm">

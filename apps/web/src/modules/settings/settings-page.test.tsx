@@ -44,7 +44,7 @@ const handbook: SourceSummary = {
   holds: "Policies",
   delivery: "live",
   url: "https://handbook.example.org",
-  ok: true,
+  state: "ok",
   linkable: true,
   linked: false,
 };

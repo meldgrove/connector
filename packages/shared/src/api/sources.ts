@@ -156,7 +156,21 @@ export const sourceSchema = z.object({
 export type Source = z.infer<typeof sourceSchema>;
 export const sourceListSchema = z.object({ items: z.array(sourceSchema) });
 
-/** A source as people and agents see it: what it holds and whether it works. */
+/**
+ * How a source is doing (source health), the same for admins (the status
+ * page), people (the home page) and agents (`list_sources`); the first that
+ * applies:
+ * - off: turned off;
+ * - setup: credentials are missing or cannot be read;
+ * - failing: its last check or delivery failed, or its latest requests did;
+ * - waiting: a webhook source that has not delivered yet;
+ * - unchecked: a live source not checked yet;
+ * - ok: working.
+ */
+export const sourceStateSchema = z.enum(["ok", "failing", "waiting", "setup", "unchecked", "off"]);
+export type SourceState = z.infer<typeof sourceStateSchema>;
+
+/** A source as people and agents see it: what it holds and how it is doing. */
 export const sourceSummarySchema = z.object({
   slug: z.string(),
   kind: sourceKindSchema,
@@ -165,7 +179,8 @@ export const sourceSummarySchema = z.object({
   holds: z.string(),
   delivery: z.enum(["live", "webhook"]),
   url: z.string(),
-  ok: z.boolean().nullable(),
+  /** As the status page judges it; never `off` (people and agents get enabled sources only). */
+  state: sourceStateSchema,
   /** People may link their account at this source (Handbook). */
   linkable: z.boolean(),
   /** The person linked their account. */

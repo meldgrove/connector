@@ -207,7 +207,8 @@ describe("MCP server", () => {
     expect(Array.isArray(recent.items)).toBe(true);
     const sources = await data(token, "list_sources");
     expect(sources.sources).toEqual([
-      expect.objectContaining({ slug: "logbook", name: "Logbook", linkedAccount: null }),
+      // The status page's state: items came in, but no delivery yet.
+      expect.objectContaining({ slug: "logbook", name: "Logbook", state: "waiting", linkedAccount: null }),
     ]);
     expect(sources.sourceOrder[0]).toBe(
       "1. Purpose and rules: Handbook pages in the spaces that hold the purpose and the rules",

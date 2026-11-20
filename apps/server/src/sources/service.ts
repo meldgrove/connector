@@ -11,7 +11,7 @@ import { audit } from "../core/audit";
 import { inAnyGroup } from "../directory/groups";
 import { conflict, notFound, validationError, zodFieldErrors } from "../http/errors";
 import { logger } from "../logger";
-import { lastCheckOrDeliveryOk } from "./health";
+import { sourceStateJudge } from "./health";
 import { KINDS, isSourceKind } from "./registry";
 import type { SourceRow } from "./types";
 
@@ -316,6 +316,7 @@ export async function usableSources(db: Db, principal: Principal, slugs?: string
 
 export async function sourceSummaries(db: Db, principal: Principal): Promise<SourceSummary[]> {
   const rows = await usableSources(db, principal);
+  const stateOf = await sourceStateJudge(db);
   const links =
     principal.kind === "user"
       ? await db
@@ -333,7 +334,7 @@ export async function sourceSummaries(db: Db, principal: Principal): Promise<Sou
       holds: SOURCE_KIND_INFO[kind].holds,
       delivery: SOURCE_KIND_INFO[kind].delivery,
       url: String(row.config.baseUrl ?? ""),
-      ok: lastCheckOrDeliveryOk(row),
+      state: stateOf(row),
       linkable: kind === "handbook" && row.config.allowLinking !== false && principal.kind === "user",
       linked: links.some((link) => link.sourceId === row.id),
     };

@@ -24,11 +24,23 @@ end, and their personal tokens and connected apps are revoked for good
 
 Admins can also remove a person (**Remove** under **Administration →
 People**), for example when someone leaves and asks for their data to be
-deleted. Their name and email are replaced, and their sign-ins, tokens,
-connected apps, linked accounts and group memberships are deleted; the
-audit log keeps their actions without their email. If they sign in again,
-they start as a new person. People in `ADMIN_EMAILS` cannot be removed, and
-nobody removes themselves.
+deleted. Removal deletes:
+
+- their name, email address, job title and picture: everywhere Connector
+  shows them, they are now “Removed person”;
+- their sign-ins, tokens, connected apps, linked accounts and group
+  memberships;
+- their email address from the audit log, which keeps their actions;
+- their name, email address and personal token names from the activity
+  log, which keeps what their agents asked under “Removed person”, so its
+  counts and the status page stay right; their email address and full
+  name also go from the search words of other people's agents (a one-word
+  name stays there, since it is also an everyday word).
+
+Their agents' own search words stay in the activity log until
+`ACTIVITY_LOG_DAYS` ends them. If they sign in again, they start as a new
+person. People in `ADMIN_EMAILS` cannot be removed, and nobody removes
+themselves.
 
 ## Groups
 

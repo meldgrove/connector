@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { ArrowRight, Cable, CircleCheck, CircleHelp, CircleX, Link2, Search, Unplug } from "lucide-react";
+import { ArrowRight, Cable, Link2, Search, Unplug } from "lucide-react";
 import type { SourceSummary } from "@connector/shared/api/sources";
 import { SOURCE_KIND_INFO } from "@connector/shared/sources";
 import { Page, PageHeader } from "@/components/layout/page";
 import { ResultRow } from "@/components/results";
+import { SourceStateBadge } from "@/components/source-state";
 import { EmptyState, ErrorState, LoadingState } from "@meldgrove/ui/states";
 import { Badge } from "@meldgrove/ui/badge";
 import { Button } from "@meldgrove/ui/button";
@@ -23,28 +24,6 @@ export function kindLabel(kind: SourceSummary["kind"]): string {
   return SOURCE_KIND_INFO[kind].label.replace(/^Meldgrove /, "");
 }
 
-function StatusBadge({ ok }: { ok: boolean | null }) {
-  const t = useT(messages);
-  if (ok === null)
-    return (
-      <Badge variant="outline">
-        <CircleHelp aria-hidden />
-        {t("unchecked")}
-      </Badge>
-    );
-  return ok ? (
-    <Badge variant="outline" className="border-emerald-600/40 text-emerald-700 dark:text-emerald-300">
-      <CircleCheck aria-hidden />
-      {t("working")}
-    </Badge>
-  ) : (
-    <Badge variant="destructive">
-      <CircleX aria-hidden />
-      {t("failing")}
-    </Badge>
-  );
-}
-
 function SourceCard({ source }: { source: SourceSummary }) {
   const t = useT(messages);
   const link = useStartLink();
@@ -58,7 +37,7 @@ function SourceCard({ source }: { source: SourceSummary }) {
         <CardDescription>{source.description || source.holds}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-2 text-xs">
-        <StatusBadge ok={source.ok} />
+        <SourceStateBadge state={source.state} />
         <span className="text-muted-foreground">{source.delivery === "live" ? t("live") : t("webhook")}</span>
       </CardContent>
       {source.linkable ? (

@@ -36,7 +36,7 @@ ends its access at once.
 | `search`                  | Searches every source at once; results with `id`, `title`, `url`, `text`, source, type, level, date, status.                                            |
 | `fetch`                   | One item in full by its `id`: `id`, `title`, `text`, `url`, `metadata` (source, type, level, status, date, related items).                              |
 | `recent_changes`          | What changed in the last days, newest first.                                                                                                            |
-| `list_sources`            | The sources the person may use, whether they work, and the source order.                                                                                |
+| `list_sources`            | The sources the person may use, how each is doing (`state`, as on the status page), and the source order.                                               |
 | `find_people`             | Colleagues by name, email address, title or group.                                                                                                      |
 | `propose_handbook_change` | Proposes a Handbook change as the person (exact text replacements or a new page) and submits it for review. Needs a linked Handbook account.            |
 
@@ -106,7 +106,9 @@ Connector runs its own OAuth 2.1 authorization server for MCP clients:
 asked: who, through which app, which tool, the search words, how many
 results, and how each source answered. It never stores the results.
 Searches in the web app are not listed. `ACTIVITY_LOG_DAYS` sets how long
-entries stay (default 90; 0 keeps none).
+entries stay (default 90; 0 keeps none). When an admin removes a person,
+their entries stay as “Removed person”, without their name, email address
+or token names ([Identity and access](identity-and-access.md#roles)).
 
 ## Safety
 

@@ -89,7 +89,7 @@ describe("sources", () => {
     expect(summaries.body.items).toEqual([
       expect.objectContaining({
         slug: "handbook",
-        ok: true,
+        state: "ok",
         linkable: true,
         linked: false,
         delivery: "live",
