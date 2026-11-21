@@ -300,6 +300,7 @@ describe("linked accounts", () => {
     for (const body of [
       { ...proposal, page: "handbook:page:../../../admin/people?x=1" },
       { ...proposal, page: `handbook:page:${PAGE_ID}/../../spaces` },
+      { ...proposal, page: `handbook:page:${"4".repeat(36)}` },
       {
         newPage: { space: "..", path: "wifi", title: "Wi-Fi", body: "x" },
         title: "Guest Wi-Fi",
