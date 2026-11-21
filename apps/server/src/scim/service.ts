@@ -496,6 +496,8 @@ export async function patchGroup(db: Db, id: string, body: Json): Promise<GroupR
       const attribute = normalizeAttribute(path);
       const single = memberInPath(path);
       if (operation.op === "remove" && single) {
+        // Members are people by ID: anything else is no member, so nothing goes.
+        if (!UUID.test(single)) continue;
         await tx
           .delete(groupMembers)
           .where(and(eq(groupMembers.groupId, group.id), eq(groupMembers.userId, single)));

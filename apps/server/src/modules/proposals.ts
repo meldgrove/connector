@@ -21,7 +21,8 @@ router.post("/proposals", async (c) => {
   const input = await jsonBody(c, proposalSchema);
   const started = performance.now();
   const ref = input.page ? parseItemId(input.page) : null;
-  if (input.page && (!ref || ref.type !== "page")) {
+  // The ID becomes part of the address Connector asks Handbook for, with the person's token.
+  if (input.page && (!ref || ref.type !== "page" || !/^[0-9a-f-]{36}$/i.test(ref.externalId))) {
     throw validationError({ page: "Use a page ID from search, e.g. handbook:page:…" });
   }
   const handbooks = (await usableSources(getDb(), principal)).filter((row) => row.kind === "handbook");
