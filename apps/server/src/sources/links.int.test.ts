@@ -295,6 +295,22 @@ describe("linked accounts", () => {
       markdown: '---\ntitle: "Wi-Fi: guests"\n---\n\nAsk at the desk.\n',
     });
 
+    // The page ID and the space become part of Handbook's address: nothing but an ID and a slug.
+    const before = handbook.requests.length;
+    for (const body of [
+      { ...proposal, page: "handbook:page:../../../admin/people?x=1" },
+      { ...proposal, page: `handbook:page:${PAGE_ID}/../../spaces` },
+      { ...proposal, page: `handbook:page:${"4".repeat(36)}` },
+      {
+        newPage: { space: "..", path: "wifi", title: "Wi-Fi", body: "x" },
+        title: "Guest Wi-Fi",
+        description: "Asked often.",
+      },
+    ]) {
+      expect((await request("POST", "/api/v1/proposals", { token: agent, body })).status).toBe(422);
+    }
+    expect(handbook.requests).toHaveLength(before);
+
     // A new page only at a free path; a taken one would be replaced.
     const taken = await request("POST", "/api/v1/proposals", {
       token: agent,

@@ -419,6 +419,24 @@ describe("federated search", () => {
     expect((await request("GET", "/api/v1/items/nothing", { userId: rita.id })).status).toBe(404);
   });
 
+  it("answers 404 or 422, never 500, for IDs and searches no source can hold", async () => {
+    await setup();
+    const rita = await createUser({ signInGroups: ["/staff"] });
+    // A percent sign that is no escape, and half an escape.
+    for (const id of ["logbook:decision:%25zz", "logbook:decision:%E0%A4%A", "logbook:decision:%00"]) {
+      expect((await request("GET", `/api/v1/items/${id}`, { userId: rita.id })).status).toBe(404);
+    }
+    // PostgreSQL stores no NUL character: it is refused before a source is asked.
+    const search = await request("GET", "/api/v1/search?q=a%00b", { userId: rita.id });
+    expect(search.status).toBe(422);
+    expect((await request("GET", "/api/v1/people?q=%00", { userId: rita.id })).status).toBe(422);
+    const context = await request("POST", "/api/v1/context", {
+      userId: rita.id,
+      body: { topic: "a\u0000b" },
+    });
+    expect(context.status).toBe(422);
+  });
+
   it("reports a slow or failing source and still answers", async () => {
     await setup();
     await createSource({

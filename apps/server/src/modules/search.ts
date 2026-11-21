@@ -39,7 +39,7 @@ router.get("/search", async (c) => {
 // IDs contain colons (`handbook:page:…`); the rest of the path is the ID.
 router.get("/items/:id{.+}", async (c) => {
   const principal = requirePrincipal(c);
-  return c.json(await fetchItem(getDb(), principal, decodeURIComponent(c.req.param("id"))));
+  return c.json(await fetchItem(getDb(), principal, c.req.param("id")));
 });
 
 router.post("/context", async (c) => {

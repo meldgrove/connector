@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { idSchema, nullableText, pageQuerySchema } from "./common";
+import { idSchema, NOT_STORABLE_MESSAGE, nullableText, pageQuerySchema, storable } from "./common";
 
 /** The signed-in person. */
 export const meSchema = z.object({
@@ -62,7 +62,12 @@ export const colleagueSchema = z.object({
 });
 export type Colleague = z.infer<typeof colleagueSchema>;
 export const colleagueQuerySchema = z.object({
-  q: z.string().trim().min(1, "Enter a name, email address or group").max(100),
+  q: z
+    .string()
+    .trim()
+    .min(1, "Enter a name, email address or group")
+    .max(100)
+    .refine(storable, NOT_STORABLE_MESSAGE),
   limit: z.coerce.number().int().min(1).max(50).default(10),
 });
 export const colleagueListSchema = z.object({ items: z.array(colleagueSchema) });
