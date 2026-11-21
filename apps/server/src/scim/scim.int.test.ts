@@ -327,6 +327,16 @@ describe("SCIM 2.0", () => {
     const user = await request("GET", `/scim/v2/Users/${rita.id}`, { token });
     expect(user.body.groups).toEqual([expect.objectContaining({ value: groupId, display: "Operations" })]);
 
+    // A member Connector never had is no member: nothing to remove, and no error.
+    const stranger = await request("PATCH", `/scim/v2/Groups/${groupId}`, {
+      token,
+      body: { Operations: [{ op: "remove", path: 'members[value eq "not-an-id"]' }] },
+    });
+    expect(stranger.status).toBe(200);
+    const beyond = await request("GET", "/scim/v2/Users?startIndex=99999999999999999999", { token });
+    expect(beyond.status).toBe(200);
+    expect(beyond.body.Resources).toEqual([]);
+
     const unknown = await request("PATCH", `/scim/v2/Groups/${groupId}`, {
       token,
       body: {

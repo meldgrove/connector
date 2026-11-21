@@ -72,7 +72,8 @@ function paging(c: Context<AppEnv>) {
   const count = Number.parseInt(c.req.query("count") ?? "100", 10);
   return {
     filter: c.req.query("filter"),
-    startIndex: Number.isFinite(start) && start >= 1 ? start : 1,
+    // Bounded: the database takes no offset beyond its integers.
+    startIndex: Number.isFinite(start) && start >= 1 ? Math.min(start, 1_000_000_000) : 1,
     count: Number.isFinite(count) ? Math.min(Math.max(count, 0), MAX_COUNT) : 100,
   };
 }

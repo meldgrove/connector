@@ -14,6 +14,9 @@ import { useSource } from "../sources/use";
  * Agents draft, people publish: a proposed Handbook change, made as the
  * person through their linked Handbook account and submitted for review.
  */
+/** A Handbook page ID: a UUID, and nothing that could change the address. */
+const PAGE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const router = new Hono<AppEnv>();
 
 router.post("/proposals", async (c) => {
@@ -21,7 +24,8 @@ router.post("/proposals", async (c) => {
   const input = await jsonBody(c, proposalSchema);
   const started = performance.now();
   const ref = input.page ? parseItemId(input.page) : null;
-  if (input.page && (!ref || ref.type !== "page")) {
+  // The ID becomes part of the address Connector asks Handbook for, with the person's token.
+  if (input.page && (!ref || ref.type !== "page" || !PAGE_ID.test(ref.externalId))) {
     throw validationError({ page: "Use a page ID from search, e.g. handbook:page:…" });
   }
   const handbooks = (await usableSources(getDb(), principal)).filter((row) => row.kind === "handbook");

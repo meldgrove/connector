@@ -19,6 +19,10 @@ export const nullableText = (max: number) =>
     z.string().trim().max(max).nullable(),
   );
 
+/** PostgreSQL stores no NUL character: text with one can neither be searched nor logged. */
+export const storable = (text: string) => !text.includes("\u0000");
+export const NOT_STORABLE_MESSAGE = "Remove the characters that are not text";
+
 export const pageQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   offset: z.coerce.number().int().min(0).default(0),

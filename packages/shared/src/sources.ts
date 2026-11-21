@@ -105,6 +105,7 @@ export function formatItemId(ref: ItemRef): string {
 
 export function parseItemId(id: string): ItemRef | null {
   const match = /^([a-z][a-z0-9-]*):([a-z_]+):(.{1,200})$/.exec(id.trim());
-  if (!match) return null;
+  // No app has a NUL character in an ID, and PostgreSQL cannot look one up.
+  if (!match || id.includes("\u0000")) return null;
   return { source: match[1]!, type: match[2]!, externalId: match[3]! };
 }

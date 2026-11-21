@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { authoritySchema, sourceKindSchema } from "../sources";
+import { NOT_STORABLE_MESSAGE, storable } from "./common";
 
 /** Matched words in snippets of the search page are wrapped in these characters. */
 export const HIGHLIGHT_START = "\u0002";
@@ -17,7 +18,7 @@ const sourceListParam = z.preprocess(
 );
 
 export const searchQuerySchema = z.object({
-  q: z.string().trim().min(1, "Enter a search").max(300),
+  q: z.string().trim().min(1, "Enter a search").max(300).refine(storable, NOT_STORABLE_MESSAGE),
   /** Source slugs, comma-separated; empty: every source the caller may use. */
   sources: sourceListParam,
   limit: z.coerce.number().int().min(1).max(50).default(20),
@@ -88,7 +89,7 @@ export const itemSchema = searchResultSchema.omit({ snippet: true }).extend({
 export type Item = z.infer<typeof itemSchema>;
 
 export const contextRequestSchema = z.object({
-  topic: z.string().trim().min(2, "Describe the topic").max(500),
+  topic: z.string().trim().min(2, "Describe the topic").max(500).refine(storable, NOT_STORABLE_MESSAGE),
   sources: sourceListParam,
   /** Results per source. */
   perSource: z.coerce.number().int().min(1).max(10).default(4),
@@ -129,7 +130,7 @@ export type RecentResponse = z.infer<typeof recentResponseSchema>;
  * bots): `POST /api/v1/knowledge/search` with a service token.
  */
 export const knowledgeSearchSchema = z.object({
-  query: z.string().trim().min(1).max(500),
+  query: z.string().trim().min(1).max(500).refine(storable, NOT_STORABLE_MESSAGE),
   limit: z.coerce.number().int().min(1).max(20).default(6),
 });
 export const knowledgeResultSchema = z.object({
@@ -158,7 +159,11 @@ export const proposalSchema = z
     /** Or a new page: the Handbook source's slug (when there are several), space, path, title and Markdown body. */
     newPage: z
       .object({
-        space: z.string().trim().min(1).max(100),
+        space: z
+          .string()
+          .trim()
+          .max(100)
+          .regex(/^[a-z0-9][a-z0-9-]*$/, "Use the space's slug, e.g. it"),
         path: z.string().trim().min(1).max(300),
         title: z.string().trim().min(1).max(200),
         body: z.string().max(100_000),
