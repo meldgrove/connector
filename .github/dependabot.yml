@@ -1,5 +1,5 @@
-# Version updates, one pull request per group: npm at the root every weekday,
-# the rest weekly. Security updates
+# Version updates, one pull request per group: npm at the root and the
+# Compose files every weekday, the rest weekly. Security updates
 # ignore the schedule and the cooldown.
 version: 2
 updates:
@@ -58,18 +58,25 @@ updates:
       - dependency-name: node
         update-types: ["version-update:semver-major"]
 
+  # Checked every weekday: the Meldgrove images (the updater, the backup
+  # agent) come at once, in a pull request of their own. compose.yaml pins
+  # the updater exactly, so a new updater reaches servers only through it.
   - package-ecosystem: docker-compose
     directory: /
     schedule:
-      interval: weekly
+      interval: daily
     cooldown:
       default-days: 7
+      exclude: ["meldgrove/*"]
     commit-message:
       prefix: chore
       include: scope
     groups:
+      meldgrove-images:
+        patterns: ["meldgrove/*"]
       compose-minor-and-patch:
         patterns: ["*"]
+        exclude-patterns: ["meldgrove/*"]
         update-types: [minor, patch]
     ignore:
       # A new PostgreSQL major also needs a data upgrade.
