@@ -6,7 +6,7 @@ const issuer = "http://keycloak.test/realms/connector";
 /** A Keycloak that issues tokens and answers every Admin API request with `status`. */
 function keycloak(status: number) {
   const calls: string[] = [];
-  const fetch = (async (input: RequestInfo | URL) => {
+  const fetch = (async (input: Parameters<typeof globalThis.fetch>[0]) => {
     const url = String(input);
     calls.push(url);
     if (url.endsWith("/protocol/openid-connect/token")) {
