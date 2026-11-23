@@ -76,7 +76,10 @@ listed, and someone who leaves the groups is blocked at the next sync.
 
 Give a client a service account: in the client, turn on _Service accounts
 roles_ and assign the realm-management role `view-users` under _Service
-account roles_. Connector uses the sign-in client unless
+account roles_. Keycloak 26.8.2 and later: also add the client scope
+`kc-admin-api` under the client's _Client scopes_ as a _Default_ scope; the
+Admin API refuses tokens without the audience it adds (HTTP 401), and an
+upgrade of Keycloak does not add it. Connector uses the sign-in client unless
 `KEYCLOAK_CLIENT_ID` and `KEYCLOAK_CLIENT_SECRET` name another one.
 `OIDC_ISSUER` must be the realm URL (`…/realms/<realm>`).
 **Administration → Directory** shows the last sync and has **Sync now**.
