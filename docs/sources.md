@@ -148,9 +148,10 @@ links again). Unlinking revokes the tokens at Handbook.
    change within a minute. The guide waits and turns green at the first
    delivery, or says why a delivery was refused (e.g. another secret).
 
-Logbook versions without **Admin › Integrations** read `WEBHOOK_URL` and
-`WEBHOOK_SECRET` from their environment: add both there and restart
-Logbook. They send every entry in their first nightly run (02:30).
+Logbook up to 0.3.2 has no **Admin › Integrations**: add both values to its
+`.env` as `WEBHOOK_URL` and `WEBHOOK_SECRET` and restart it. It then sends
+every entry in its first nightly run (02:30). Newer versions copy the two
+variables into their database once.
 
 Logbook sends published updates, learnings and logged decisions, and
 decided or rejected proposals; never drafts or open proposals. Everyone
@@ -166,8 +167,7 @@ group. Decisions carry _in force_, _superseded by LB-…_ or _rejected_.
    `cli settings apply webhook` with the same body. Library sends each
    change within a minute, and every note in its first nightly run (02:30).
    Library up to 0.3.2 reads `WEBHOOK_URL` and `WEBHOOK_SECRET` from its
-   `.env` instead and needs a restart; newer versions copy them into their
-   database once.
+   `.env` instead and needs a restart; newer versions copy them once.
 2. Notes for everyone are shown to everyone the source is open to. **Team
    notes** are shown only to the team: to members of the Keycloak group the
    note names (Library with `DIRECTORY=keycloak`, Connector with

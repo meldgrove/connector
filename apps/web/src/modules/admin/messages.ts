@@ -129,7 +129,7 @@ export const messages = defineMessages({
 
     webhookTitle: "Webhook of “{name}”",
     webhookDescription:
-      "The app sends its content here. Enter both values in the app under Admin → Integrations → Webhook; everything arrives in its first nightly run (02:30) at the latest. Versions without that page read WEBHOOK_URL and WEBHOOK_SECRET from their environment and need a restart.",
+      "The app sends its content here. Enter both values in the app under Admin → Integrations → Webhook; everything arrives in its first nightly run (02:30) at the latest. Versions up to 0.3.2 read WEBHOOK_URL and WEBHOOK_SECRET from their environment and need a restart.",
     webhookUrl: "URL",
     generate: "Generate webhook secret",
     regenerate: "Generate a new secret",

@@ -51,8 +51,8 @@ draft.
 ## Bots (service tokens)
 
 Bots without a person, such as the Meldgrove Support Agent, use a service
-token (`cn_svc_…`, **Administration → Service tokens**, or
-`cli tokens create service` on the server). They read only
+token (`cn_svc_…`, **Administration → Service tokens**, or on the
+[command line](deployment.md#tokens)). They read only
 sources opened to service tokens, and only content meant for everyone there
 (no team notes); they cannot look up people or propose changes.
 

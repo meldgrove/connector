@@ -81,7 +81,7 @@ export const messages = defineMessages({
     sendText: "In {app}, open {link}, enter these two values under Webhook, and save. No restart.",
     sendLink: "Admin → Integrations",
     sendEnvironment:
-      "Versions of {app} without that page read them from their environment instead: add them as WEBHOOK_URL and WEBHOOK_SECRET (for example to the .env file next to its compose.yaml) and restart {app}.",
+      "{app} up to 0.3.2 has no such page: add them as WEBHOOK_URL and WEBHOOK_SECRET to its environment (for example the .env file next to its compose.yaml) and restart it.",
     fieldWebhookUrl: "URL",
     fieldSigningSecret: "Signing secret",
     sendStored:

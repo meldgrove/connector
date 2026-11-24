@@ -79,7 +79,7 @@ export const sources: Setting = {
       note:
         `Connected the source ${created.name}. ID: ${created.id}` +
         (needsSecret
-          ? `\nNext: cli tokens create webhook-secret --source ${created.id}, then the secret and the URL ${created.webhookUrl} in ${SOURCE_KIND_INFO[created.kind].label}.`
+          ? `\nNext: docker compose exec -T web cli tokens create webhook-secret --source ${created.id} > file, then the secret and the URL ${created.webhookUrl} in ${SOURCE_KIND_INFO[created.kind].label}.`
           : ""),
     };
   },

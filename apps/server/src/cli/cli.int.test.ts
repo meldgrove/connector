@@ -303,7 +303,7 @@ describe("cli tokens create webhook-secret", () => {
     const id = added.json().id as string;
     expect(added.stderr).toBe(
       `Connected the source Logbook. ID: ${id}\n` +
-        `Next: cli tokens create webhook-secret --source ${id}, then the secret and the URL http://localhost:3000/hooks/logbook in Meldgrove Logbook.\n`,
+        `Next: docker compose exec -T web cli tokens create webhook-secret --source ${id} > file, then the secret and the URL http://localhost:3000/hooks/logbook in Meldgrove Logbook.\n`,
     );
     expect((await cli(["settings", "list"])).stdout).toBe(
       `sources --id ${id}  incomplete  Meldgrove Logbook "Logbook" (logbook); https://logbook.example.org; everyone signed in; no webhook secret; webhook http://localhost:3000/hooks/logbook; no delivery yet\n`,
@@ -474,6 +474,7 @@ describe("cli usage", () => {
       "cli settings apply sources",
       "cli settings test sources --id <id>",
       "cli settings remove sources --id <id>",
+      "docker compose exec -T web cli tokens create <kind> … > file",
       "cli tokens create service",
       "cli tokens create scim",
       "cli tokens create webhook-secret --source <id>",
@@ -614,10 +615,11 @@ describe("the cli process", () => {
     const unreachable = await runProcess(["settings", "list"], {
       env: { DATABASE_URL: "postgres://connector:connector@127.0.0.1:9/connector" },
     });
-    expect(unreachable).toMatchObject({ code: 1, stdout: "" });
-    expect(unreachable.stderr).toContain("Something went wrong. Try again.\n");
-    expect(unreachable.stderr).toContain('"msg":"command failed"');
-    expect(unreachable.stderr).toContain('"role":"cli"');
+    expect(unreachable).toMatchObject({
+      code: 1,
+      stdout: "",
+      stderr: "Something went wrong. Try again. (ECONNREFUSED)\n",
+    });
   });
 
   it("writes all of a long output to a slow reader before it exits", async () => {

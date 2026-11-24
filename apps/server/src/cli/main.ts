@@ -1,6 +1,6 @@
 import { ZodError } from "zod";
+import { ConfigError } from "../config";
 import { AppError, CONCURRENT_CHANGE_CODES, databaseErrorCode, zodFieldErrors } from "../http/errors";
-import { logger } from "../logger";
 import { UsageError, type CliIo } from "./io";
 import { settingsCommand, type Setting } from "./settings";
 import { sources } from "./sources";
@@ -16,6 +16,8 @@ function help(): string {
   const width = Math.max(...SETTINGS.map((setting) => setting.name.length));
   return `Meldgrove Connector: the operator command. On a server with compose.yaml:
   docker compose run --rm -T migrate cli <command>
+A command that prints a secret, so that Docker's logs do not keep it:
+  docker compose exec -T web cli tokens create <kind> … > file
 In a terminal of the app's container (Coolify): cli <command>
 
 Settings:
@@ -48,10 +50,16 @@ or a body that is not JSON. Example bodies: ${DOCS}
 `;
 }
 
+/** The code to show: a SQLSTATE (it has a digit), or a system error's, such as ECONNREFUSED. */
+function codeNote(code: string | undefined): string {
+  if (code && /^(?=.*\d)[0-9A-Z]{5}$/.test(code)) return ` (database error ${code})`;
+  return code && /^[A-Z][A-Z0-9_]*$/.test(code) ? ` (${code})` : "";
+}
+
 /**
- * What went wrong, for stderr, with the page's messages. A database error
- * gets the page's generic message: its text can quote values, and a failed
- * query carries its parameters.
+ * What went wrong, for stderr, with the page's messages. A database error or
+ * an unexpected error gets the page's generic message with its code at most:
+ * its text could quote a value, such as a query's parameter or a header.
  */
 function report(error: unknown, io: CliIo): number {
   if (error instanceof UsageError) {
@@ -71,17 +79,16 @@ function report(error: unknown, io: CliIo): number {
     }
     return 1;
   }
+  if (error instanceof ConfigError) {
+    io.err(`${error.message}\n`);
+    return 1;
+  }
   const code = databaseErrorCode(error);
   if (code && CONCURRENT_CHANGE_CODES.has(code)) {
     io.err("Someone else changed this at the same time. Try again.\n");
     return 1;
   }
-  if (code && /^[0-9A-Z]{5}$/.test(code)) {
-    io.err(`Something went wrong. Try again. (database error ${code})\n`);
-    return 1;
-  }
-  logger.error({ err: error }, "command failed");
-  io.err("Something went wrong. Try again.\n");
+  io.err(`Something went wrong. Try again.${codeNote(code)}\n`);
   return 1;
 }
 

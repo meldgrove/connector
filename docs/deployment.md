@@ -251,14 +251,25 @@ page: send the new secret along, or apply it next.
 | `scim`           | `--name <name> [--expires-in-days <days>\|never]` | Identity systems such as Meldgrove IAM; stderr names the SCIM base URL                               |
 | `webhook-secret` | `--source <id>`                                   | Logbook and Library: a new webhook secret that replaces the one before; stderr names the webhook URL |
 
-Without `--expires-in-days`, a token stops working after 90 days. The token
-is alone on stdout, so `> file` keeps only the token. Connect a Logbook (or
-a Library) without a browser, in Connector's folder and then in Logbook's:
+Run these in the running container, with `docker compose exec`: the token
+is alone on stdout, so `> file` keeps only the token, and Docker does not log
+it (it logs what `docker compose run` prints). On Coolify, run
+`cli tokens create …` in a terminal of the `web` container.
+
+```sh
+umask 077
+docker compose exec -T web cli tokens create service --name "Support Agent" > token.txt
+```
+
+Without `--expires-in-days`, a token stops working after 90 days.
+
+Connect a Logbook (or a Library) without a browser, in Connector's folder
+and then in Logbook's:
 
 ```sh
 umask 077
 docker compose run --rm -T migrate cli settings apply sources < logbook.json   # prints the ID
-docker compose run --rm -T migrate cli tokens create webhook-secret --source <id> > secret.txt
+docker compose exec -T web cli tokens create webhook-secret --source <id> > secret.txt
 
 cd /srv/logbook
 jq -n --rawfile secret /srv/connector/secret.txt \
@@ -267,7 +278,7 @@ jq -n --rawfile secret /srv/connector/secret.txt \
 rm /srv/connector/secret.txt
 ```
 
-Older versions of the two apps have no `cli settings apply webhook`
+Logbook and Library up to 0.3.2 have no `cli settings apply webhook`
 ([Sources](sources.md#meldgrove-logbook)).
 
 ## Health checks
