@@ -79,4 +79,7 @@ an admin if a source is missing.
   moment, and the page reloads when the new version runs. A warning
   triangle means an installation failed; the icon says why, and the
   version before keeps running. The server must run the updater
-  ([Deployment](deployment.md#automatic-updates)).
+  ([Deployment](deployment.md#automatic-updates)). A note (updater 0.2.4
+  and later) warns while the updater takes requests without a token;
+  whoever runs the server then sets `UPDATER_TOKEN`
+  ([Protect the update service](deployment.md#protect-the-update-service)).

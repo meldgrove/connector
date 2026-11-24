@@ -1,38 +1,46 @@
-import { Hono, type Context } from "hono";
-import { updateChannelInputSchema, updateInstallSchema } from "@connector/shared/api/updates";
+import { Hono } from "hono";
+import { createUpdatesHandler } from "@meldgrove/ui/updates/server";
+import { config } from "../config";
 import type { AppEnv } from "../http/env";
-import { jsonBody, requireAdmin } from "../http/middleware";
-import { askUpdater, type UpdatesAnswer } from "../updates/updater";
+import { requireAdmin } from "../http/middleware";
+import { logger } from "../logger";
 
 /**
  * Updates of the app, for admins in the web app (never agents or service
  * tokens): the status, a check, an installation and the channel, through
  * the Meldgrove Updater (docs/deployment.md, Automatic updates).
+ * `@meldgrove/ui` asks the updater at UPDATER_URL with UPDATER_TOKEN and
+ * answers `UpdatesResponse` (a refusal as 409, the updater's 5xx as that
+ * 5xx, a wrong body as 400). Connector checks the admin first; changes also
+ * need the app's origin (`sameOrigin`, http/app.ts).
  */
 const router = new Hono<AppEnv>();
 
-const answer = (c: Context<AppEnv>, result: UpdatesAnswer) => c.json(result.body, result.status);
+const updates = createUpdatesHandler(() => ({
+  url: config().UPDATER_URL,
+  token: config().UPDATER_TOKEN,
+  appVersion: config().APP_VERSION ?? null,
+  logger,
+}));
 
-router.get("/admin/updates", async (c) => {
+router.get("/admin/updates", (c) => {
   requireAdmin(c);
-  return answer(c, await askUpdater({ call: "status" }));
+  return updates.respond("status");
 });
 
-router.post("/admin/updates/check", async (c) => {
+router.post("/admin/updates/check", (c) => {
   requireAdmin(c);
-  return answer(c, await askUpdater({ call: "check" }));
+  return updates.respond("check");
 });
 
-router.post("/admin/updates/install", async (c) => {
+router.post("/admin/updates/install", (c) => {
   requireAdmin(c);
-  const { version } = await jsonBody(c, updateInstallSchema);
-  return answer(c, await askUpdater({ call: "install", version }));
+  return updates.respond("install", c.req.raw);
 });
 
-router.post("/admin/updates/channel", async (c) => {
+router.post("/admin/updates/channel", (c) => {
   requireAdmin(c);
-  const { channel } = await jsonBody(c, updateChannelInputSchema);
-  return answer(c, await askUpdater({ call: "channel", channel }));
+  return updates.respond("channel", c.req.raw);
 });
 
 export default router;

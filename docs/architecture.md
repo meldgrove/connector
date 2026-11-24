@@ -243,9 +243,11 @@ Under `/api/v1`, JSON, contracts in `packages/shared/src/api/`:
   `/admin/service-tokens…`, `/admin/scim-tokens…`, `/admin/audit`,
   `/admin/activity`, `/admin/status`.
 - Admins in the web app only (no tokens or agents): `GET /admin/updates`,
-  `POST /admin/updates/check`, `/install`, `/channel`. They ask the
-  updater at `UPDATER_URL` with `UPDATER_TOKEN` and answer `UpdatesResponse`; a refusal of the
-  updater comes back as 409 with `error`, an updater's 5xx as that 5xx.
+  `POST /admin/updates/check`, `/install`, `/channel` (`modules/updates.ts`).
+  Connector checks the admin and the origin; `@meldgrove/ui/updates/server`
+  checks the body (400), asks the updater at `UPDATER_URL` with
+  `UPDATER_TOKEN` and answers `UpdatesResponse`: a refusal of the updater
+  as 409 with `error`, an updater's 5xx as that 5xx.
 
 Errors are `{ error: { code, message, fields? } }`. Browser requests that
 change something need the app's origin; bearer requests are exempt.

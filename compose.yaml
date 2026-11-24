@@ -35,7 +35,8 @@ x-app-environment: &app-environment
   # The reverse proxy in front of the app sets X-Forwarded-For.
   TRUST_PROXY: ${TRUST_PROXY:-true}
   # The update button of admins asks the updater service below, with this
-  # token (openssl rand -base64 32), which the updater then requires.
+  # token (recommended; openssl rand -hex 32), which the updater then
+  # requires.
   UPDATER_URL: ${UPDATER_URL:-http://updater:8080}
   UPDATER_TOKEN: ${UPDATER_TOKEN:-}
 

@@ -72,10 +72,11 @@ process.
 5. **Environment variables** of the resource: `CONNECTOR_VERSION` (a series
    such as `0.1`, see [Automatic updates](#automatic-updates)), `APP_URL`
    (the domain), `DATABASE_URL` (the database's internal URL), a new
-   `AUTH_SECRET`, `ENCRYPTION_KEY` and `UPDATER_TOKEN` (each
-   `openssl rand -base64 32`), the `OIDC_*` values, your address in
-   `ADMIN_EMAILS`, `DIRECTORY` (`keycloak` with a Keycloak service account),
-   and `SEARCH_LANGUAGES` for the languages of your Logbook and Library.
+   `AUTH_SECRET` and `ENCRYPTION_KEY` (each `openssl rand -base64 32`), an
+   `UPDATER_TOKEN` (`openssl rand -hex 32`), the `OIDC_*` values, your
+   address in `ADMIN_EMAILS`, `DIRECTORY` (`keycloak` with a Keycloak
+   service account), and `SEARCH_LANGUAGES` for the languages of your
+   Logbook and Library.
 6. **Deploy**, open `APP_URL`, sign in, and connect the first source with
    its guide under **Administration → Status** ([Sources](sources.md)).
 7. **Automatic updates:** set them up [on Coolify](#on-coolify).
@@ -103,10 +104,11 @@ run the commands as root (`sudo -i`).
    `<APP_URL>/api/auth/callback/oidc` ([Identity and access](identity-and-access.md)).
 4. **Create `.env`** from `.env.example` (`cp .env.example .env`,
    `chmod 600 .env`) and set production values: `CONNECTOR_VERSION` (a
-   series such as `0.1`), `APP_URL`, `DATABASE_URL`, a new `AUTH_SECRET`,
-   `ENCRYPTION_KEY` and `UPDATER_TOKEN` (each `openssl rand -base64 32`),
-   the `OIDC_*` values, your address in `ADMIN_EMAILS`, `DIRECTORY`, and
-   `SEARCH_LANGUAGES` for the languages of your Logbook and Library. Remove
+   series such as `0.1`), `APP_URL`, `DATABASE_URL`, a new `AUTH_SECRET`
+   and `ENCRYPTION_KEY` (each `openssl rand -base64 32`), an `UPDATER_TOKEN`
+   (`openssl rand -hex 32`), the `OIDC_*` values, your address in
+   `ADMIN_EMAILS`, `DIRECTORY`, and `SEARCH_LANGUAGES` for the languages of
+   your Logbook and Library. Remove
    `NODE_ENV=development`, `RUN_MIGRATIONS` and
    `OAUTH_ALLOW_PRIVATE_CLIENT_URLS`. With an `https` `APP_URL`, the app
    does not start with the example `AUTH_SECRET` or `ENCRYPTION_KEY`, or with
@@ -199,8 +201,9 @@ reaches the updater at `UPDATER_URL` (`http://updater:8080` in
 `compose.yaml`). On the server, `docker compose exec updater updater status`
 shows the same, and `docker compose logs updater` says what the updater
 did. With `UPDATER_TOKEN` set, the app sends it and the updater refuses
-requests without it; without it, anything that reaches the updater on the
-Docker network could install updates. Never publish the updater's port.
+requests without it. Never publish the updater's port. Without the token,
+everything works as before; see
+[Protect the update service](#protect-the-update-service).
 
 Set up [backups](#backups) first: migrations run without anyone watching.
 
@@ -249,6 +252,27 @@ docker compose exec updater updater install 0.2.0     # now, also a new series
 The update button and **Administration → Updates** do the same in the app.
 A version that failed to install is not tried again automatically; a newer
 one is.
+
+### Protect the update service
+
+Recommended for installations without `UPDATER_TOKEN`. Without it, the
+updater takes requests from anything on the app's Docker network, and
+**Administration → Updates** warns about it (updater 0.2.4 and later).
+Nothing else changes: the app and its updates work as before. The app and
+the updater both read the token from `UPDATER_TOKEN`.
+
+1. Make a token: `openssl rand -hex 32`.
+2. Set it and restart:
+   - **Coolify:** add `UPDATER_TOKEN` to the resource's environment
+     variables and redeploy.
+   - **Debian:** in `/srv/connector`, add `UPDATER_TOKEN=<token>` to `.env`,
+     run `git pull` (the newest `compose.yaml` passes the token to the
+     updater), then `docker compose up -d`.
+3. Open **Administration → Updates**: it shows the update status. A
+   message that names `UPDATER_TOKEN` means the app and the updater do not
+   have the same token yet. On Coolify, check the resource's environment
+   variable and redeploy; on Debian, check `.env` and run
+   `docker compose up -d` again.
 
 ## Backups
 
