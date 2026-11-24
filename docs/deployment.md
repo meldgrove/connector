@@ -253,8 +253,10 @@ page: send the new secret along, or apply it next.
 
 Run these in the running container, with `docker compose exec`: the token
 is alone on stdout, so `> file` keeps only the token, and Docker does not log
-it (it logs what `docker compose run` prints). On Coolify, run
-`cli tokens create …` in a terminal of the `web` container.
+it (it logs what `docker compose run` prints). Name a file that does not
+exist yet: `umask` makes a new file private, an existing one keeps its
+permissions. On Coolify, run `cli tokens create …` in a terminal of the `web`
+container.
 
 ```sh
 (umask 077; docker compose exec -T web cli tokens create service --name "Support Agent" > token.txt)
