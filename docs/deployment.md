@@ -257,8 +257,7 @@ it (it logs what `docker compose run` prints). On Coolify, run
 `cli tokens create …` in a terminal of the `web` container.
 
 ```sh
-umask 077
-docker compose exec -T web cli tokens create service --name "Support Agent" > token.txt
+(umask 077; docker compose exec -T web cli tokens create service --name "Support Agent" > token.txt)
 ```
 
 Without `--expires-in-days`, a token stops working after 90 days.
@@ -267,9 +266,8 @@ Connect a Logbook (or a Library) without a browser, in Connector's folder
 and then in Logbook's:
 
 ```sh
-umask 077
 docker compose run --rm -T migrate cli settings apply sources < logbook.json   # prints the ID
-docker compose exec -T web cli tokens create webhook-secret --source <id> > secret.txt
+(umask 077; docker compose exec -T web cli tokens create webhook-secret --source <id> > secret.txt)
 
 cd /srv/logbook
 jq -n --rawfile secret /srv/connector/secret.txt \

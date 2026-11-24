@@ -203,22 +203,31 @@ const schema = z
         message: "Use 0 or at least SESSION_DAYS",
       });
     }
-    for (const email of splitList(value.ADMIN_EMAILS)) {
+    // Messages name the entry by its place, not its value: they reach logs and the operator command.
+    for (const [index, email] of splitList(value.ADMIN_EMAILS).entries()) {
       if (!z.email().safeParse(email).success) {
-        ctx.addIssue({ code: "custom", path: ["ADMIN_EMAILS"], message: `Not an email address: ${email}` });
+        ctx.addIssue({
+          code: "custom",
+          path: ["ADMIN_EMAILS"],
+          message: `Entry ${index + 1} is not an email address`,
+        });
       }
     }
-    for (const domain of splitList(value.ALLOWED_EMAIL_DOMAINS)) {
+    for (const [index, domain] of splitList(value.ALLOWED_EMAIL_DOMAINS).entries()) {
       if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain)) {
-        ctx.addIssue({ code: "custom", path: ["ALLOWED_EMAIL_DOMAINS"], message: `Not a domain: ${domain}` });
+        ctx.addIssue({
+          code: "custom",
+          path: ["ALLOWED_EMAIL_DOMAINS"],
+          message: `Entry ${index + 1} is not a domain`,
+        });
       }
     }
-    for (const language of splitList(value.SEARCH_LANGUAGES)) {
+    for (const [index, language] of splitList(value.SEARCH_LANGUAGES).entries()) {
       if (!TEXT_SEARCH_CONFIG.test(language)) {
         ctx.addIssue({
           code: "custom",
           path: ["SEARCH_LANGUAGES"],
-          message: `Not a text search configuration: ${language}`,
+          message: `Entry ${index + 1} is not a text search configuration`,
         });
       }
     }
@@ -252,7 +261,7 @@ export type Config = z.infer<typeof schema> & {
 
 let cached: Config | undefined;
 
-/** A missing or invalid variable. Its message names variables and rules, never a secret. */
+/** A missing or invalid variable. Its message names variables and rules, never values. */
 export class ConfigError extends Error {
   override name = "ConfigError";
 }

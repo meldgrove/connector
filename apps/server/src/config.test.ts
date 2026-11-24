@@ -29,6 +29,26 @@ describe("config", () => {
     expect(configWith({ AUTH_SECRET: "a-real-secret-a-real-secret-a-real-secret" })).not.toThrow();
   });
 
+  it("names the entry of a list that is wrong by its place, never its value", () => {
+    const values = {
+      ADMIN_EMAILS: "ada@example.org, pasted-secret",
+      ALLOWED_EMAIL_DOMAINS: "pasted-secret",
+      SEARCH_LANGUAGES: "english, pasted-secret",
+    };
+    let message = "";
+    try {
+      configWith(values)();
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toBe(
+      "Invalid configuration:\n" +
+        "  ADMIN_EMAILS: Entry 2 is not an email address\n" +
+        "  ALLOWED_EMAIL_DOMAINS: Entry 1 is not a domain\n" +
+        "  SEARCH_LANGUAGES: Entry 2 is not a text search configuration",
+    );
+  });
+
   it("allows private client URLs only in development", () => {
     expect(configWith({ OAUTH_ALLOW_PRIVATE_CLIENT_URLS: "true" })).not.toThrow();
     expect(

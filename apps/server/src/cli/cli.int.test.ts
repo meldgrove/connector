@@ -303,7 +303,7 @@ describe("cli tokens create webhook-secret", () => {
     const id = added.json().id as string;
     expect(added.stderr).toBe(
       `Connected the source Logbook. ID: ${id}\n` +
-        `Next: docker compose exec -T web cli tokens create webhook-secret --source ${id} > file, then the secret and the URL http://localhost:3000/hooks/logbook in Meldgrove Logbook.\n`,
+        `Next: (umask 077; docker compose exec -T web cli tokens create webhook-secret --source ${id} > secret.txt), then the secret and the URL http://localhost:3000/hooks/logbook in Meldgrove Logbook.\n`,
     );
     expect((await cli(["settings", "list"])).stdout).toBe(
       `sources --id ${id}  incomplete  Meldgrove Logbook "Logbook" (logbook); https://logbook.example.org; everyone signed in; no webhook secret; webhook http://localhost:3000/hooks/logbook; no delivery yet\n`,
@@ -474,7 +474,7 @@ describe("cli usage", () => {
       "cli settings apply sources",
       "cli settings test sources --id <id>",
       "cli settings remove sources --id <id>",
-      "docker compose exec -T web cli tokens create <kind> … > file",
+      "(umask 077; docker compose exec -T web cli tokens create <kind> … > token.txt)",
       "cli tokens create service",
       "cli tokens create scim",
       "cli tokens create webhook-secret --source <id>",
@@ -619,6 +619,12 @@ describe("the cli process", () => {
       code: 1,
       stdout: "",
       stderr: "Something went wrong. Try again. (ECONNREFUSED)\n",
+    });
+    // Also an error while the modules load (the logger refuses the level) shows no value.
+    expect(await runProcess(["settings", "list"], { env: { LOG_LEVEL: CRM_KEY } })).toEqual({
+      code: 1,
+      stdout: "",
+      stderr: "Something went wrong. Try again.\n",
     });
   });
 

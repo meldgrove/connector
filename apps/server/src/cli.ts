@@ -8,6 +8,12 @@
  */
 import { logToStderr } from "./log-target";
 
+// An error outside the command's own reporting, such as while the modules
+// load: only the generic message, since its text could quote a value.
+process.on("uncaughtException", () => {
+  process.stderr.write("Something went wrong. Try again.\n");
+  process.exit(1);
+});
 logToStderr();
 // Loaded only now: the logger reads the target when it loads.
 const { runCli } = await import("./cli/main");
