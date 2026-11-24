@@ -174,7 +174,10 @@ export async function updateSource(db: Db, actor: Actor, id: string, input: Sour
     set.name = input.name;
     changes.push(`renamed to “${input.name}”`);
   }
-  if (input.description !== undefined) set.description = input.description;
+  if (input.description !== undefined && input.description !== row.description) {
+    set.description = input.description;
+    changes.push("changed its description");
+  }
   if (input.enabled !== undefined && input.enabled !== row.enabled) {
     set.enabled = input.enabled;
     changes.push(input.enabled ? "turned on" : "turned off");
@@ -191,7 +194,10 @@ export async function updateSource(db: Db, actor: Actor, id: string, input: Sour
     set.serviceAccess = input.serviceAccess;
     changes.push(input.serviceAccess ? "opened to service tokens" : "closed to service tokens");
   }
-  if (input.position !== undefined) set.position = input.position;
+  if (input.position !== undefined && input.position !== row.position) {
+    set.position = input.position;
+    changes.push("changed its place in the list");
+  }
   if (input.config !== undefined) {
     const parsed = kind.config.safeParse(input.config);
     if (!parsed.success) {

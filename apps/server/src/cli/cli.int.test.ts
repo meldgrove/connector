@@ -55,8 +55,9 @@ let handbook: FakeApp;
 
 beforeAll(async () => {
   handbook = await startFakeApp((req) => {
+    // An app that repeats the token it got.
     if (bearerOf(req) !== HANDBOOK_TOKEN)
-      return { status: 401, json: { error: { code: "unauthorized", message: "Unknown token" } } };
+      return { status: 401, json: { error: { message: `Unknown token ${bearerOf(req)}` } } };
     if (req.path === "/api/v1/spaces") {
       return { json: { items: [{ slug: "it", name: "IT" }, { slug: "policies" }] } };
     }
@@ -158,12 +159,12 @@ describe("cli settings … sources", () => {
     expect(failed.code).toBe(1);
     expect(failed.json()).toEqual({
       ok: false,
-      message: "Handbook refused the credentials: Unknown token",
+      message: "Handbook refused the credentials: Unknown token …",
     });
-    expect(failed.stderr).toBe("Handbook refused the credentials: Unknown token\n");
+    expect(failed.stderr).toBe("Handbook refused the credentials: Unknown token …\n");
     expect(await cli(["settings", "show", "sources", "--id", id, "--spaces"])).toMatchObject({
       code: 1,
-      stderr: "Handbook refused the credentials: Unknown token\n",
+      stderr: "Handbook refused the credentials: Unknown token …\n",
     });
 
     const changed = await cli(["settings", "apply", "sources", "--id", id], {
@@ -269,6 +270,18 @@ describe("cli settings … sources", () => {
       code: 1,
       stderr: "Only Handbook sources have spaces\n",
     });
+  });
+
+  it("records every change, also one field alone, and nothing when nothing changes", async () => {
+    const added = await cli(["settings", "apply", "sources"], logbookBody);
+    const id = added.json().id as string;
+    await cli(["settings", "apply", "sources", "--id", id], { description: "What happened" });
+    await cli(["settings", "apply", "sources", "--id", id], { position: 3 });
+    await cli(["settings", "apply", "sources", "--id", id], { description: "What happened", position: 3 });
+    expect((await auditEntries("source.update")).map((entry) => entry.summary)).toEqual([
+      `Source “Logbook”: changed its description (cli settings apply sources --id ${id})`,
+      `Source “Logbook”: changed its place in the list (cli settings apply sources --id ${id})`,
+    ]);
   });
 
   it("takes a webhook secret of the app's own", async () => {
@@ -529,7 +542,7 @@ describe("the admin pages and the command", () => {
     });
     const read = await request("GET", `/api/v1/admin/sources/${saved.body.id}/spaces`, { userId: admin.id });
     expect(read.status).toBe(409);
-    expect(read.body.error.message).toBe("Handbook refused the credentials: Unknown token");
+    expect(read.body.error.message).toBe("Handbook refused the credentials: Unknown token …");
   });
 
   it("show the operator and the whole command in the audit log, after a long summary too", async () => {

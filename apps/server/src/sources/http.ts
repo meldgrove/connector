@@ -94,7 +94,7 @@ export async function sourceRequest<T extends z.ZodType>(
     json: options.body,
   });
   if (!answer.ok) {
-    const quoted = errorMessage(answer.data);
+    const quoted = errorMessage(answer.data, options.token);
     const fail = (kind: FailureKind, words: string, quote: string | null = null) =>
       new SourceError(quote ? `${words}: ${quote}` : words, { kind, diagnostic: words });
     if (answer.status === 401) throw fail("refused", `${options.app} refused the credentials`, quoted);
@@ -152,10 +152,11 @@ function fetchErrorCode(error: unknown): string {
   return typeof cause?.code === "string" ? cause.code : "connection failed";
 }
 
-/** The `{ error: { message } }` of a Meldgrove app, shortened. */
-function errorMessage(data: unknown): string | null {
+/** The `{ error: { message } }` of a Meldgrove app, shortened, and never with the token it got. */
+function errorMessage(data: unknown, token: string | null): string | null {
   const error = (data as { error?: unknown } | null)?.error;
   const message =
     typeof error === "object" && error !== null ? (error as { message?: unknown }).message : undefined;
-  return typeof message === "string" ? message.slice(0, 200) : null;
+  if (typeof message !== "string") return null;
+  return (token ? message.replaceAll(token, "…") : message).slice(0, 200);
 }

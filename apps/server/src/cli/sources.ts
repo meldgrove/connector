@@ -60,11 +60,11 @@ export const sources: Setting = {
   // `--spaces`: Handbook's spaces, for the rule spaces in the body.
   showOptions: { options: { spaces: { type: "boolean" } }, usage: SHOW_USAGE },
   async show(id, { spaces }) {
-    const db = getDb();
     if (id === undefined) {
       if (spaces) throw new UsageError("Give the Handbook source's --id.", SHOW_USAGE);
-      return { items: await listSources(db) };
+      return { items: await listSources(getDb()) };
     }
+    const db = getDb();
     return spaces ? listHandbookSpaces(db, id) : sourceView(db, await getSource(db, id));
   },
   async apply(actor, body, id) {
