@@ -253,13 +253,13 @@ page: send the new secret along, or apply it next.
 
 Run these in the running container, with `docker compose exec`: the token
 is alone on stdout, so `> file` keeps only the token, and Docker does not log
-it (it logs what `docker compose run` prints). Name a file that does not
-exist yet: `umask` makes a new file private, an existing one keeps its
-permissions. On Coolify, run `cli tokens create …` in a terminal of the `web`
+it (it logs what `docker compose run` prints). `umask` makes the new file
+private; `set -C` refuses to overwrite one that is there already, which would
+keep its permissions. On Coolify, run `cli tokens create …` in a terminal of the `web`
 container.
 
 ```sh
-(umask 077; docker compose exec -T web cli tokens create service --name "Support Agent" > token.txt)
+(umask 077; set -C; docker compose exec -T web cli tokens create service --name "Support Agent" > token.txt)
 ```
 
 Without `--expires-in-days`, a token stops working after 90 days.
@@ -269,7 +269,7 @@ and then in Logbook's:
 
 ```sh
 docker compose run --rm -T migrate cli settings apply sources < logbook.json   # prints the ID
-(umask 077; docker compose exec -T web cli tokens create webhook-secret --source <id> > secret.txt)
+(umask 077; set -C; docker compose exec -T web cli tokens create webhook-secret --source <id> > secret.txt)
 
 cd /srv/logbook
 jq -n --rawfile secret /srv/connector/secret.txt \

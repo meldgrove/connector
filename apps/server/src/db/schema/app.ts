@@ -264,6 +264,8 @@ export const credentials = pgTable(
     userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
     grantId: uuid("grant_id"),
     createdById: uuid("created_by_id").references(() => users.id, { onDelete: "set null" }),
+    /** Created with the operator command, so by no user. */
+    createdByOperator: boolean("created_by_operator").notNull().default(false),
     expiresAt: timestamp("expires_at", { withTimezone: true }),
     lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
     /** Service and SCIM tokens: the last time something sent it after it was revoked or expired. */
