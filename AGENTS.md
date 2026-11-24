@@ -126,5 +126,5 @@ Releases: Actions → Release → Run workflow (shared Meldgrove workflow; see
 
 UI text and messages are in US English; short and plain. Never commit
 secrets, real personal data or data from a real organization: use
-`example.org` addresses and invented content. The license is not chosen
-yet: add no license file or text.
+`example.org` addresses and invented content. The code is licensed under
+the Apache License 2.0 (`LICENSE`).
