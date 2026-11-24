@@ -13,7 +13,7 @@ import { secretOf, sourceBySlug } from "./service";
 /**
  * Webhooks of Meldgrove apps at /hooks/<source slug> (docs/sources.md).
  * Logbook and Library sign `<timestamp>.<raw body>` with HMAC-SHA256 and
- * the shared WEBHOOK_SECRET; Connector checks the signature against the raw
+ * the shared webhook secret; Connector checks the signature against the raw
  * body before reading it, in constant time, and refuses timestamps more
  * than five minutes off. Deliveries are idempotent: each carries the whole
  * item, so repeats and retries replace it with the same content.

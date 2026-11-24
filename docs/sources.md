@@ -3,7 +3,9 @@
 A source is one connected app. Admins connect sources with a setup guide
 per app (**Administration → Status**, or **Connect a source** under
 **Administration → Sources**); each has a kind, an address, credentials,
-and the people who may use it.
+and the people who may use it. On the server, `cli settings apply sources`
+does the same without a browser
+([Settings from the command line](deployment.md#settings-from-the-command-line)).
 
 | Kind               | Holds                                                      | How Connector reads it                                                |
 | ------------------ | ---------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -132,12 +134,24 @@ links again). Unlinking revokes the tokens at Handbook.
 
 1. In the guide **Connect Meldgrove Logbook**, enter Logbook's address
    (for links) and who may use it, and choose **Connect**. Connector
-   generates the webhook secret and shows both lines once:
-   `WEBHOOK_URL=<APP_URL>/hooks/<slug>` and `WEBHOOK_SECRET=…`.
-2. Add them to Logbook's environment and restart it.
-3. Logbook sends changes within a minute; its first nightly run (02:30)
-   sends every entry. The guide waits and turns green at the first
+   generates the webhook secret and shows the URL
+   `<APP_URL>/hooks/<slug>` and the secret once.
+2. In Logbook, open **Admin › Integrations**, enter both under **Webhook**
+   (_URL_ and _Signing secret_), and choose **Save webhook**. No restart.
+   On the server instead, pipe
+   `{"url": "<APP_URL>/hooks/<slug>", "secret": "<secret>"}` into
+   `docker compose run --rm -T migrate cli settings apply webhook` in
+   Logbook's folder; on Coolify, run `cli settings apply webhook` in a
+   terminal of Logbook's `web` container, paste the body (it is not shown)
+   and press Ctrl-D.
+3. Logbook sends every entry within a few minutes of the save, then each
+   change within a minute. The guide waits and turns green at the first
    delivery, or says why a delivery was refused (e.g. another secret).
+
+Logbook up to 0.3.2 has no **Admin › Integrations**: add both values to its
+`.env` as `WEBHOOK_URL` and `WEBHOOK_SECRET` and restart it. It then sends
+every entry in its first nightly run (02:30). Newer versions copy the two
+variables into their database once.
 
 Logbook sends published updates, learnings and logged decisions, and
 decided or rejected proposals; never drafts or open proposals. Everyone
@@ -147,8 +161,13 @@ group. Decisions carry _in force_, _superseded by LB-…_ or _rejected_.
 
 ## Meldgrove Library
 
-1. Connect it with the guide **Connect Meldgrove Library** as for Logbook.
-   Library resends every note in its first nightly run.
+1. Connect it with the guide **Connect Meldgrove Library** as for Logbook:
+   in Library, both values go under **Admin → Integrations → Webhook**
+   (_URL_, _Signing secret_, then **Save**), or into
+   `cli settings apply webhook` with the same body. Library sends each
+   change within a minute, and every note in its first nightly run (02:30).
+   Library up to 0.3.2 reads `WEBHOOK_URL` and `WEBHOOK_SECRET` from its
+   `.env` instead and needs a restart; newer versions copy them once.
 2. Notes for everyone are shown to everyone the source is open to. **Team
    notes** are shown only to the team: to members of the Keycloak group the
    note names (Library with `DIRECTORY=keycloak`, Connector with

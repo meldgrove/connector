@@ -2,21 +2,30 @@ import { lt, sql } from "drizzle-orm";
 import { config } from "../config";
 import type { DbOrTx } from "../db/client";
 import { auditLog } from "../db/schema";
-import type { UserPrincipal } from "../auth/principal";
+import { isOperator, type Actor } from "../auth/principal";
 
-/** Records a change by an admin or owner. `summary` must never contain secrets. */
+/**
+ * Records a change by an admin, or by the operator command, which shows as
+ * the actor `operator` with its command after the summary. `summary` must
+ * never contain secrets.
+ */
 export async function audit(
   db: DbOrTx,
-  actor: UserPrincipal | null,
+  actor: Actor | null,
   entry: { action: string; entityType: string; entityId?: string | null; summary: string },
 ) {
+  const operator = isOperator(actor) ? actor : null;
+  const user = isOperator(actor) ? null : actor;
   await db.insert(auditLog).values({
-    actorUserId: actor?.id ?? null,
-    actorEmail: actor?.email ?? null,
+    actorUserId: user?.id ?? null,
+    actorEmail: operator ? "operator" : (user?.email ?? null),
     action: entry.action,
     entityType: entry.entityType,
     entityId: entry.entityId ?? null,
-    summary: entry.summary.slice(0, 500),
+    // The command stays whole, also after a long summary.
+    summary: operator
+      ? `${entry.summary.slice(0, 500 - operator.command.length - 3)} (${operator.command})`
+      : entry.summary.slice(0, 500),
   });
 }
 

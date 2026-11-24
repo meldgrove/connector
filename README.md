@@ -30,7 +30,8 @@ orders results by which source wins when they disagree.
   with dynamic client registration for linked accounts.
 - **Easy to run.** A setup guide per app, a status page that shows what
   needs an admin (a failing source, a token about to expire, a stopped
-  sync), and automatic updates with an update button for admins.
+  sync), an operator command that connects sources and issues tokens
+  without a browser, and automatic updates with an update button for admins.
 - **Oversight.** An activity log of what agents and bots asked and which
   sources answered, an audit log of admin changes, error reports to Sentry
   without personal data.
@@ -49,8 +50,8 @@ Hono server, React web app, PostgreSQL, one Docker image.
   other agents; tools; bots.
 - [Identity and access](docs/identity-and-access.md): sign-in, groups, the
   directory (Keycloak, SCIM), who may use which source.
-- [Deployment](docs/deployment.md): Coolify or a Debian server, upgrades,
-  automatic updates, backups, Sentry.
+- [Deployment](docs/deployment.md): Coolify or a Debian server, settings
+  from the command line, upgrades, automatic updates, backups, Sentry.
 - [Configuration](docs/configuration.md): every environment variable.
 - [Architecture](docs/architecture.md): how it works inside.
 - [Contributing](CONTRIBUTING.md): development setup, checks, releases.

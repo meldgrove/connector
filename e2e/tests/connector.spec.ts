@@ -103,16 +103,17 @@ test("an admin connects Logbook with its guide, and the guide sees the first del
   await ada.getByLabel("Address").fill("https://logbook.example.org");
   await ada.getByRole("button", { name: "Connect", exact: true }).click();
 
-  // The two values for Logbook's environment, the secret hidden and copied once.
-  await expect(ada.getByTestId("webhook-env")).toHaveText(
-    `WEBHOOK_URL=${APP}/hooks/logbook\nWEBHOOK_SECRET=${"•".repeat(16)}`,
+  // The two values for Logbook's webhook, the secret hidden and copied once.
+  await expect(ada.getByTestId("webhook-url")).toHaveText(`${APP}/hooks/logbook`);
+  await expect(ada.getByRole("link", { name: "Admin → Integrations" })).toHaveAttribute(
+    "href",
+    "https://logbook.example.org/admin/integrations",
   );
+  await expect(ada.getByLabel("Signing secret")).toHaveAttribute("type", "password");
   await ada.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: APP });
-  await ada.getByRole("button", { name: "Copy both lines" }).click();
+  await ada.getByTestId("step-3").getByRole("button", { name: "Copy" }).last().click();
   await expect(ada.getByRole("button", { name: "Copied" })).toBeVisible();
-  const env = await ada.evaluate(() => navigator.clipboard.readText());
-  expect(env).toContain(`WEBHOOK_URL=${APP}/hooks/logbook`);
-  webhookSecret = /WEBHOOK_SECRET=(\S+)/.exec(env)![1]!;
+  webhookSecret = await ada.evaluate(() => navigator.clipboard.readText());
   expect(webhookSecret.length).toBeGreaterThan(20);
   await expect(ada.getByText("Waiting for Logbook…")).toBeVisible();
 

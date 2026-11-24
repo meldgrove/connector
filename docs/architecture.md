@@ -43,7 +43,9 @@ what webhook sources send, replaced on every change and deleted on removal.
   knowledge, history, record, library). Adapters set it: Handbook pages in
   rule spaces are `rules`, Logbook decisions in force are `decision`.
 - **Principal**: who asks (`auth/principal.ts`): a person (web session,
-  personal token, connected app) with their groups, or a service token.
+  personal token, connected app) with their groups, or a service token. The
+  operator is not one: only `src/cli` creates it (a symbol no request can
+  carry), and only admin changes and the audit log take it (`Actor`).
 - **Source health**: how a source is doing (`sources/health.ts`), from its
   last check or delivery, agents' and bots' reads of it, and its
   credentials. Its state means the same on the status page, the home page
@@ -67,6 +69,13 @@ One Docker image, one Node.js entry point (`apps/server/src/main.ts`);
   unfinished account links, and old audit and activity entries.
 - **migrate**: applies the Drizzle migrations under an advisory lock.
 - **all**: web and worker in one process.
+
+The operator command (`apps/server/src/cli.ts`, `cli` in the image) is a
+second entry point: `cli settings …` and `cli tokens …`
+([Deployment](deployment.md#settings-from-the-command-line)) call the
+functions that the admin routes call (`sources/service.ts`,
+`auth/admin-tokens.ts`), log to stderr and exit. Every process reads the
+sources from the database at each request, so nothing has to be told.
 
 ## Data
 

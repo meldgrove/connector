@@ -13,6 +13,7 @@ groups and tokens.
 | Agent (personal token or connected app) | Acts as its person: the same sources and items; proposes Handbook changes for review; never administers.                                                                                              |
 | Service token                           | Bots such as the Support Agent: reads only sources opened to service tokens, and only content meant for everyone there.                                                                               |
 | SCIM token                              | Identity systems such as Meldgrove IAM: people and groups at `/scim/v2`, nothing else.                                                                                                                |
+| Operator (`cli` on the server)          | Connects sources and manages service and SCIM tokens as an admin does ([Deployment](deployment.md#settings-from-the-command-line)); the audit log names the `operator`. Never over HTTP.              |
 
 Admins come from `ADMIN_EMAILS` (always admins, also the way back in) or are
 made admins by another admin under **Administration → People**. Admin rights

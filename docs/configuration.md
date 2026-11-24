@@ -2,7 +2,10 @@
 
 Every setting that comes from the environment. Blank values count as unset,
 except for `UPDATER_URL` (below).
-Sources, who may use them, groups and tokens are set up in the app.
+Sources, who may use them, groups and tokens are set up in the app; the
+sources and the service and SCIM tokens also with the operator command
+([Settings from the command line](deployment.md#settings-from-the-command-line)).
+No secret of a connected app belongs here.
 
 ## Required
 

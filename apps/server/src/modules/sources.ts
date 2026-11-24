@@ -1,20 +1,15 @@
 import { Hono } from "hono";
 import { and, desc, eq } from "drizzle-orm";
-import {
-  sourceCreateSchema,
-  sourceUpdateSchema,
-  type HandbookSpaceList,
-  type Link,
-} from "@connector/shared/api/sources";
+import { sourceCreateSchema, sourceUpdateSchema, type Link } from "@connector/shared/api/sources";
 import { getDb } from "../db/client";
 import { sourceLinks, sources } from "../db/schema";
 import type { AppEnv } from "../http/env";
-import { conflict, notFound } from "../http/errors";
+import { notFound } from "../http/errors";
 import { idParam, jsonBody, requireAdmin, requireWebUser } from "../http/middleware";
 import { logger } from "../logger";
-import { handbookSpaces } from "../sources/handbook";
 import { finishLink, mayLink, startLink, unlink } from "../sources/links";
 import { checkSource } from "../sources/health";
+import { listHandbookSpaces } from "../sources/spaces";
 import {
   createSource,
   deleteSource,
@@ -26,7 +21,6 @@ import {
   updateSource,
 } from "../sources/service";
 import { SourceError } from "../sources/types";
-import { administerSource } from "../sources/use";
 
 /** Sources (admins) and linked accounts (everyone in the web app). */
 const router = new Hono<AppEnv>();
@@ -65,12 +59,7 @@ router.post("/admin/sources/:id/check", async (c) => {
 /** Handbook's spaces, for choosing the rule spaces (setup guide). */
 router.get("/admin/sources/:id/spaces", async (c) => {
   requireAdmin(c);
-  const row = await getSource(getDb(), idParam(c));
-  if (row.kind !== "handbook") throw conflict("Only Handbook sources have spaces");
-  const use = await administerSource(getDb(), row, (_, context) => handbookSpaces(context));
-  if (!use.ok) throw conflict(use.error.message);
-  const body: HandbookSpaceList = { items: use.value };
-  return c.json(body);
+  return c.json(await listHandbookSpaces(getDb(), idParam(c)));
 });
 
 router.post("/admin/sources/:id/webhook-secret", async (c) => {

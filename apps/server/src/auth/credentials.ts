@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import type { Token } from "@connector/shared/api/tokens";
 import { config } from "../config";
 import type { DbOrTx } from "../db/client";
 import { credentials, oauthClients, oauthGrants, users } from "../db/schema";
@@ -73,6 +74,25 @@ export async function issueCredential(
     })
     .returning({ id: credentials.id });
   return { id: row!.id, secret };
+}
+
+const iso = (value: Date | null) => (value ? value.toISOString() : null);
+
+/** A credential as its owner or an admin sees it: never the token itself. */
+export function tokenView(row: typeof credentials.$inferSelect): Token {
+  return {
+    id: row.id,
+    name: row.name,
+    prefix: row.prefix,
+    createdAt: row.createdAt.toISOString(),
+    lastUsedAt: iso(row.lastUsedAt),
+    expiresAt: iso(row.expiresAt),
+  };
+}
+
+/** When a token of so many days stops working; null: never. */
+export function expiryIn(days: number | null): Date | null {
+  return days === null ? null : new Date(Date.now() + days * 86_400_000);
 }
 
 const LAST_USED_RESOLUTION_MS = 60_000;

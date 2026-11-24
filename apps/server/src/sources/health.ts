@@ -237,7 +237,7 @@ function judgeSource(row: SourceRow, requests: Requests | undefined): SourceVerd
       problem: {
         severity: "warning",
         title: `Waiting for the first delivery from ${name}`,
-        detail: `Set WEBHOOK_URL and WEBHOOK_SECRET in ${app} and restart it. It delivers when something is published or changed there, and everything at its first nightly run (02:30).`,
+        detail: `Enter the webhook's URL and secret in ${app}. It delivers when something is published or changed there, and everything in its first nightly run (02:30) at the latest.`,
       },
     };
   }

@@ -28,7 +28,7 @@ import {
 import { messages as adminMessages } from "../messages";
 import { createBody, emptyForm, formOf, slugFrom, updateBody, type SourceForm } from "../source-dialog";
 import { messages } from "./messages";
-import { AppLink, baseUrlOf, CopyRow, EnvBlock, GuideStep, Outcome, withLink } from "./steps";
+import { AppLink, baseUrlOf, CopyRow, GuideStep, Outcome, withLink } from "./steps";
 
 const APP_NAMES: Record<SourceKind, string> = {
   handbook: "Handbook",
@@ -443,28 +443,28 @@ function GuideBody(props: {
       <div className="space-y-4">
         {whereStep}
         {accessStep}
-        <GuideStep
-          number={next()}
-          title={t("sendTitle", { app })}
-          description={source ? t("sendText", { app }) : undefined}
-          done={delivered}
-          locked={!source}
-        >
+        <GuideStep number={next()} title={t("sendTitle", { app })} done={delivered} locked={!source}>
+          <p className="text-sm">
+            {withLink(
+              t("sendText", { app }),
+              <AppLink href={base ? `${base}/admin/integrations` : null}>{t("sendLink")}</AppLink>,
+            )}
+          </p>
+          <CopyRow label={t("fieldWebhookUrl")} value={webhookUrl} testId="webhook-url" />
           {secret ? (
             <>
-              <EnvBlock
-                lines={[
-                  ["WEBHOOK_URL", webhookUrl],
-                  ["WEBHOOK_SECRET", secret, true],
-                ]}
-                copyLabel={t("copyAll")}
-                testId="webhook-env"
+              <CopyRow
+                // A new secret starts hidden, even when the one before was shown.
+                key={secret}
+                label={t("fieldSigningSecret")}
+                value={secret}
+                secret
+                testId="webhook-secret"
               />
               <p className="text-muted-foreground text-sm">{t("shownOnce")}</p>
             </>
           ) : (
             <>
-              <CopyRow label="WEBHOOK_URL" value={webhookUrl} testId="webhook-url" />
               {storedSecret ? (
                 <p className="text-muted-foreground text-sm">{t("sendStored", { hint: storedSecret })}</p>
               ) : null}
@@ -474,12 +474,7 @@ function GuideBody(props: {
               </Button>
             </>
           )}
-          <p className="text-muted-foreground text-sm">
-            {withLink(
-              t("sendAdmin"),
-              <AppLink href={base ? `${base}/admin` : null}>{t("adminPage", { app })}</AppLink>,
-            )}
-          </p>
+          <p className="text-muted-foreground text-sm">{t("sendEnvironment", { app })}</p>
         </GuideStep>
         <GuideStep number={next()} title={t("waitTitle")} done={delivered} locked={!source}>
           {refused && source?.status ? (

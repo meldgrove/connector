@@ -45,3 +45,21 @@ export function parseWith<T extends z.ZodType>(schema: T, value: unknown): z.inf
   if (!parsed.success) throw validationError(zodFieldErrors(parsed.error));
   return parsed.data;
 }
+
+/**
+ * PostgreSQL errors of a request that ran into another one at the same time:
+ * unique violation (e.g. two creates at one path), deadlock, serialization
+ * failure. Trying again gives the right answer.
+ */
+export const CONCURRENT_CHANGE_CODES = new Set(["23505", "40P01", "40001"]);
+
+/** The SQLSTATE of a database error, also when Drizzle wrapped it (`cause`). */
+export function databaseErrorCode(error: unknown): string | undefined {
+  let current = error;
+  for (let depth = 0; depth < 3 && current instanceof Error; depth += 1) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+    current = current.cause;
+  }
+  return undefined;
+}

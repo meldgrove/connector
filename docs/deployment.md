@@ -1,7 +1,8 @@
 # Deployment
 
 For the person who runs Meldgrove Connector on a server: requirements, the
-setup on [Coolify](#coolify) or on a [Debian server](#debian), upgrades,
+setup on [Coolify](#coolify) or on a [Debian server](#debian),
+[settings from the command line](#settings-from-the-command-line), upgrades,
 automatic updates, backups, Sentry and troubleshooting. Every environment
 variable is described in [Configuration](configuration.md).
 
@@ -31,7 +32,7 @@ the releases within a series install without anyone acting. Every change on
 
 | File                    | Contains                                                                           |
 | ----------------------- | ---------------------------------------------------------------------------------- |
-| `Dockerfile`            | The image. Its command (`all`, `web`, `worker`, `migrate`) picks the role.         |
+| `Dockerfile`            | The image. Its command (`all`, `web`, `worker`, `migrate`, `cli`) picks the role.  |
 | `compose.yaml`          | A one-off `migrate`, the web app (`web`), the `worker` and the optional `updater`. |
 | `compose.postgres.yaml` | Adds a PostgreSQL 18 container, for servers without a database of their own.       |
 
@@ -78,7 +79,8 @@ process.
    service account), and `SEARCH_LANGUAGES` for the languages of your
    Logbook and Library.
 6. **Deploy**, open `APP_URL`, sign in, and connect the first source with
-   its guide under **Administration → Status** ([Sources](sources.md)).
+   its guide under **Administration → Status** ([Sources](sources.md)), or
+   [without a browser](#settings-from-the-command-line).
 7. **Automatic updates:** set them up [on Coolify](#on-coolify).
 8. **Backups:** for [Meldgrove Backups](#backups), add `BACKUP_URL` and
    `BACKUP_TOKEN` (from the app's source in Backups) to the environment
@@ -131,8 +133,153 @@ run the commands as root (`sudo -i`).
    `CONNECTOR_PORT` set, use that port instead of 3000.
 
 7. Open `APP_URL`, sign in, and connect the first source with its guide
-   under **Administration → Status** ([Sources](sources.md)).
+   under **Administration → Status** ([Sources](sources.md)), or
+   [without a browser](#settings-from-the-command-line).
 8. **Automatic updates:** set them up [on Debian](#on-debian).
+
+## Settings from the command line
+
+`cli` is Connector's operator command. It sets what admins set under
+**Administration**, the sources and the tokens, with the same checks, and
+the audit log names the `operator` and the command. On the server, in
+`/srv/connector`:
+
+```sh
+docker compose run --rm -T migrate cli settings list
+```
+
+On Coolify, run `cli settings list` in a terminal of the `web` container
+(or anywhere with `docker compose exec web cli settings list`).
+
+| Command                                        | What it does                                                                                                                                      |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cli settings list [--json]`                   | Every source with its ID: set, or incomplete (its secret is missing or unreadable), with hints; never a secret                                    |
+| `cli settings show sources [--id <id>]`        | Every source, or one, as JSON, as the admin page reads it                                                                                         |
+| `cli settings show sources --id <id> --spaces` | The spaces of a Handbook, for `ruleSpaces`                                                                                                        |
+| `cli settings apply sources [--id <id>]`       | Reads the JSON body of the admin page from stdin and saves it; without `--id`, connects a new source and prints its ID. Prints what `show` prints |
+| `cli settings test sources --id <id>`          | What the page's **Check** button does                                                                                                             |
+| `cli settings remove sources --id <id>`        | Removes the source and everything Connector kept of it                                                                                            |
+| `cli tokens create <kind> …`                   | Issues a token and prints it once, alone on stdout ([below](#tokens))                                                                             |
+| `cli tokens list [--json]`                     | The service and SCIM tokens: name, first characters, dates                                                                                        |
+| `cli tokens revoke <id>`                       | Ends a service or SCIM token for good                                                                                                             |
+| `cli help`                                     | The commands                                                                                                                                      |
+
+Secrets go only on stdin, never in an argument: arguments show in `ps` and
+the shell history. Pasted into a terminal, the body is not shown; end it
+with Ctrl-D. Exit codes: 0 done, 1 refused (the page's message on stderr),
+2 a wrong command or a body that is not JSON.
+
+An AI agent with access to the server sets a secret like this: the secret
+arrives as a file, the agent pipes the body into `cli settings apply`, runs
+`cli settings test`, and deletes the file.
+
+```sh
+jq -n --rawfile token handbook-token.txt \
+  '{kind: "handbook", slug: "handbook", name: "Handbook",
+    config: {baseUrl: "https://handbook.example.org"},
+    secret: {serviceToken: ($token | rtrimstr("\n"))}}' |
+  docker compose run --rm -T migrate cli settings apply sources
+docker compose run --rm -T migrate cli settings test sources --id <id>
+rm handbook-token.txt
+```
+
+### sources
+
+A new source names its `kind`, a `slug` (it starts item IDs and the webhook
+address, and cannot change later), a `name` and its `config`; the rest is
+optional:
+
+```json
+{
+  "kind": "handbook",
+  "slug": "handbook",
+  "name": "Handbook",
+  "description": "Policies and guides",
+  "enabled": true,
+  "accessGroups": ["/staff"],
+  "serviceAccess": false,
+  "config": {
+    "baseUrl": "https://handbook.example.org",
+    "ruleSpaces": ["policies"],
+    "allowLinking": true
+  },
+  "secret": { "serviceToken": "<Handbook's service token>" }
+}
+```
+
+```json
+{
+  "kind": "crm",
+  "slug": "crm",
+  "name": "CRM",
+  "accessGroups": ["/staff/fundraising"],
+  "config": { "baseUrl": "https://crm.example.org", "types": ["contact", "organization", "deal"] },
+  "secret": { "apiKey": "<the CRM's API key>" }
+}
+```
+
+```json
+{
+  "kind": "logbook",
+  "slug": "logbook",
+  "name": "Logbook",
+  "config": { "baseUrl": "https://logbook.example.org" }
+}
+```
+
+```json
+{
+  "kind": "library",
+  "slug": "library",
+  "name": "Library",
+  "config": { "baseUrl": "https://library.example.org", "teamGroupPrefix": "/teams" }
+}
+```
+
+With `--id`, a body changes only the fields it names; `config` is replaced
+as a whole, and the kind and the slug stay:
+`{ "accessGroups": ["/staff"], "secret": { "apiKey": "<a new key>" } }`. A
+secret that is left out or empty stays as saved. A Handbook or CRM that
+moves to another host loses its secret and its linked accounts, as on the
+page: send the new secret along, or apply it next.
+
+### Tokens
+
+| Kind             | Options                                           | For                                                                                                  |
+| ---------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `service`        | `--name <name> [--expires-in-days <days>\|never]` | Bots such as the Support Agent; stderr names the search URL                                          |
+| `scim`           | `--name <name> [--expires-in-days <days>\|never]` | Identity systems such as Meldgrove IAM; stderr names the SCIM base URL                               |
+| `webhook-secret` | `--source <id>`                                   | Logbook and Library: a new webhook secret that replaces the one before; stderr names the webhook URL |
+
+Run these in the running container, with `docker compose exec`: the token
+is alone on stdout, so `> file` keeps only the token, and Docker does not log
+it (it logs what `docker compose run` prints). Name a file that does not
+exist yet: `umask` makes a new file private, an existing one keeps its
+permissions. On Coolify, run `cli tokens create …` in a terminal of the `web`
+container.
+
+```sh
+(umask 077; docker compose exec -T web cli tokens create service --name "Support Agent" > token.txt)
+```
+
+Without `--expires-in-days`, a token stops working after 90 days.
+
+Connect a Logbook (or a Library) without a browser, in Connector's folder
+and then in Logbook's:
+
+```sh
+docker compose run --rm -T migrate cli settings apply sources < logbook.json   # prints the ID
+(umask 077; docker compose exec -T web cli tokens create webhook-secret --source <id> > secret.txt)
+
+cd /srv/logbook
+jq -n --rawfile secret /srv/connector/secret.txt \
+  '{url: "https://connector.example.org/hooks/logbook", secret: ($secret | rtrimstr("\n"))}' |
+  docker compose run --rm -T migrate cli settings apply webhook
+rm /srv/connector/secret.txt
+```
+
+Logbook and Library up to 0.3.2 have no `cli settings apply webhook`
+([Sources](sources.md#meldgrove-logbook)).
 
 ## Health checks
 

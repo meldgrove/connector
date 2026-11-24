@@ -66,7 +66,8 @@ describe("source requests", () => {
       {
         path: "/unauthorized",
         kind: "refused",
-        message: "Handbook refused the credentials: Unknown token tok_123",
+        // Never the token it got, even when the app repeats it.
+        message: "Handbook refused the credentials: Unknown token …",
         diagnostic: "Handbook refused the credentials",
       },
       {
