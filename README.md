@@ -67,3 +67,9 @@ npm run dev
 Open http://localhost:5173 and sign in as `ada@example.org` (password
 `connector-dev`), an admin. Connect a source with its guide under
 **Administration → Status**.
+
+## License
+
+Copyright 2026 Meldgrove
+
+Licensed under the [Apache License 2.0](LICENSE).
