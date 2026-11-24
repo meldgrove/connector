@@ -118,7 +118,7 @@ export const messages = defineMessages({
     teamGroupPrefixHint:
       "Team notes are shown to members of <prefix>/<team name>, e.g. /teams. Members of the Keycloak group the note names always see them.",
     webhookSecret: "Webhook secret",
-    webhookSecretHint: "Optional: paste the app's WEBHOOK_SECRET, or generate one after saving.",
+    webhookSecretHint: "Optional: paste the app's signing secret, or generate one after saving.",
     accessGroups: "Groups",
     accessGroupsHint:
       "Comma-separated, e.g. /staff. Members (and subgroups) may use the source. Empty: everyone signed in.",
@@ -129,12 +129,12 @@ export const messages = defineMessages({
 
     webhookTitle: "Webhook of “{name}”",
     webhookDescription:
-      "The app sends its content here. Set these two values in the app (WEBHOOK_URL and WEBHOOK_SECRET) and restart it; its first nightly run (02:30) sends everything.",
-    webhookUrl: "WEBHOOK_URL",
+      "The app sends its content here. Enter both values in the app under Admin → Integrations → Webhook; everything arrives in its first nightly run (02:30) at the latest. Versions without that page read WEBHOOK_URL and WEBHOOK_SECRET from their environment and need a restart.",
+    webhookUrl: "URL",
     generate: "Generate webhook secret",
     regenerate: "Generate a new secret",
     secretOnce: "Copy it now: you won't see it again. A new secret replaces the old one.",
-    secretLabel: "WEBHOOK_SECRET",
+    secretLabel: "Signing secret",
     secretStored: "A secret is stored ({hint}).",
     done: "Done",
 

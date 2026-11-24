@@ -12,7 +12,6 @@ export const messages = defineMessages({
     notFound: "This source does not exist anymore.",
     done: "Done",
     toStatus: "Back to the status",
-    copyAll: "Copy both lines",
     shownOnce: "Copy it now: Connector shows it only this once.",
 
     // Sources: where the app is.
@@ -79,10 +78,12 @@ export const messages = defineMessages({
     connect: "Connect",
     connecting: "Connecting…",
     sendTitle: "Tell {app} where to send",
-    sendText:
-      "Add these two lines to {app}'s environment (for example the .env file next to its compose.yaml) and restart {app}.",
-    sendAdmin: "Afterwards, {link} shows the webhook as on.",
-    adminPage: "{app}'s Administration page",
+    sendText: "In {app}, open {link}, enter these two values under Webhook, and save. No restart.",
+    sendLink: "Admin → Integrations",
+    sendEnvironment:
+      "Versions of {app} without that page read them from their environment instead: add them as WEBHOOK_URL and WEBHOOK_SECRET (for example to the .env file next to its compose.yaml) and restart {app}.",
+    fieldWebhookUrl: "URL",
+    fieldSigningSecret: "Signing secret",
     sendStored:
       "A secret is stored ({hint}). If you don't have it anymore, generate a new one; it replaces the old one.",
     newSecret: "Generate a new secret",
@@ -90,7 +91,7 @@ export const messages = defineMessages({
     waitTitle: "Wait for the first delivery",
     waiting: "Waiting for {app}…",
     waitingHint:
-      "{app} sends something within a minute after it is published or changed, and everything at its first nightly run (02:30, server time).",
+      "{app} sends something within a minute after it is published or changed, and everything in its first nightly run (02:30, server time) at the latest.",
     received: "{app} delivered",
     receivedText: "{message} · {items}",
     deliveryFailed: "{app}'s delivery was refused",

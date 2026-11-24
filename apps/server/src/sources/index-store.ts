@@ -199,12 +199,12 @@ export function indexAdapter(
         .where(eq(items.sourceId, context.source.id));
       const secret = context.secret.webhookSecret;
       if (typeof secret !== "string" || secret === "") {
-        throw new SourceError("Set a webhook secret, then the same value as WEBHOOK_SECRET in the app");
+        throw new SourceError("Set a webhook secret, then the same secret in the app");
       }
       const last = context.source.lastDeliveryAt;
       return last
         ? `${row?.count ?? 0} items; last delivery ${last.toISOString().slice(0, 16).replace("T", " ")} UTC`
-        : "Waiting for the first delivery: set WEBHOOK_URL and WEBHOOK_SECRET in the app";
+        : "Waiting for the first delivery: enter the webhook's URL and secret in the app";
     },
 
     async search(context, query, limit) {

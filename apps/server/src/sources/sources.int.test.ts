@@ -150,7 +150,7 @@ describe("sources", () => {
     });
     expect(checked.body).toEqual({
       ok: true,
-      message: "Waiting for the first delivery: set WEBHOOK_URL and WEBHOOK_SECRET in the app",
+      message: "Waiting for the first delivery: enter the webhook's URL and secret in the app",
     });
     const handbook = await request("POST", "/api/v1/admin/sources", {
       userId: admin.id,

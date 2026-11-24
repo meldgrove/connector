@@ -29,9 +29,10 @@ One Docker image runs every process: `APP_ROLE` = `all | web | worker | migrate`
 ```
 apps/server/src/
   main.ts          entry; APP_ROLE selects the processes
+  cli.ts, cli/     operator command: cli settings, cli tokens
   config.ts        every environment variable (zod); read only via config()
   db/schema/       Drizzle schema (auth.ts, app.ts)
-  auth/            Better Auth, sign-in check and groups, credentials (tokens), principals
+  auth/            Better Auth, sign-in check and groups, credentials and admin tokens, principals
   sources/         sources (service.ts), source use (use.ts), source health (health.ts), one adapter per kind, the index, webhooks, linked accounts
   search/          federation: search, fetch, context, recent, activity log
   directory/       groups, Keycloak directory sync, people directory
@@ -79,6 +80,12 @@ packages/shared/src/  contracts, source kinds and order, limits
 - **UI components** come from `@meldgrove/ui` (`@meldgrove/ui/<name>`, `cn`
   from `@meldgrove/ui/utils`); the app keeps no copies. A missing component or
   a fix goes into that package.
+- **Operator command** (`src/cli`): what an admin page sets, the command
+  sets too, with the same functions: no checks of its own, no route logic
+  that only the page has. Only `src/cli` creates the operator
+  (`auth/principal.ts`); secrets come on stdin and are never printed, except
+  a new token once. Changes to the settings also change
+  `docs/deployment.md`, "Settings from the command line".
 - **Update routes** (`modules/updates.ts`) come from
   `@meldgrove/ui/updates/server`, which checks their body and asks the
   updater; Connector checks the admin first. The app keeps no updater client.

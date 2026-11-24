@@ -191,15 +191,15 @@ describe("admin sources", () => {
     const user = userEvent.setup();
     await user.click(await screen.findByRole("button", { name: "Webhook" }));
     await user.click(screen.getByRole("button", { name: "Generate webhook secret" }));
-    const first = await screen.findByLabelText("WEBHOOK_SECRET");
+    const first = await screen.findByLabelText("Signing secret");
     expect(first).toHaveValue("secret-1-1234567890");
     expect(first).toHaveAttribute("type", "password");
     await user.click(screen.getByRole("button", { name: "Show" }));
     expect(first).toHaveAttribute("type", "text");
 
     await user.click(screen.getByRole("button", { name: "Generate a new secret" }));
-    await waitFor(() => expect(screen.getByLabelText("WEBHOOK_SECRET")).toHaveValue("secret-2-1234567890"));
-    expect(screen.getByLabelText("WEBHOOK_SECRET")).toHaveAttribute("type", "password");
+    await waitFor(() => expect(screen.getByLabelText("Signing secret")).toHaveValue("secret-2-1234567890"));
+    expect(screen.getByLabelText("Signing secret")).toHaveAttribute("type", "password");
   });
 });
 
@@ -239,21 +239,27 @@ describe("setup guides", () => {
       }),
     );
     expect(created).toHaveBeenCalledWith(logbook.id);
-    // The secret shows as dots; copying gives both lines with it.
-    expect(await screen.findByTestId("webhook-env")).toHaveTextContent(
-      "WEBHOOK_URL=https://connector.example.org/hooks/logbook WEBHOOK_SECRET=••••••••••••••••",
+    // Where to enter the two values, and where older versions read them.
+    expect(await screen.findByTestId("webhook-url")).toHaveTextContent(
+      "https://connector.example.org/hooks/logbook",
     );
-    expect(screen.getByTestId("webhook-env")).not.toHaveTextContent("generated-secret");
-    // The eye button shows the secret on request.
-    const secretField = screen.getByLabelText("WEBHOOK_SECRET");
+    expect(screen.getByRole("link", { name: "Admin → Integrations" })).toHaveAttribute(
+      "href",
+      "https://logbook.example.org/admin/integrations",
+    );
+    expect(screen.getByText(/add them as WEBHOOK_URL and WEBHOOK_SECRET/)).toBeInTheDocument();
+    // The secret is hidden; the eye button shows it on request.
+    const secretField = screen.getByLabelText("Signing secret");
     expect(secretField).toHaveAttribute("type", "password");
     expect(secretField).toHaveValue("generated-secret-1234567890");
     await user.click(screen.getByRole("button", { name: "Show" }));
     expect(secretField).toHaveAttribute("type", "text");
-    await user.click(screen.getByRole("button", { name: "Copy both lines" }));
-    await expect(navigator.clipboard.readText()).resolves.toBe(
-      "WEBHOOK_URL=https://connector.example.org/hooks/logbook\nWEBHOOK_SECRET=generated-secret-1234567890",
-    );
+    const step = screen.getByTestId("step-3");
+    const [copyUrl, copySecret] = within(step).getAllByRole("button", { name: "Copy" });
+    await user.click(copyUrl!);
+    await expect(navigator.clipboard.readText()).resolves.toBe("https://connector.example.org/hooks/logbook");
+    await user.click(copySecret!);
+    await expect(navigator.clipboard.readText()).resolves.toBe("generated-secret-1234567890");
     expect(screen.getByText("Waiting for Logbook…")).toBeInTheDocument();
 
     // The first delivery arrives; the guide notices on its next look.
@@ -266,7 +272,7 @@ describe("setup guides", () => {
     expect(await screen.findByText("Logbook delivered", undefined, { timeout: 5000 })).toBeInTheDocument();
     expect(screen.getByText("Received LB-12 · 1 item")).toBeInTheDocument();
     // The secret stays to copy until the admin leaves.
-    expect(screen.getByTestId("webhook-env")).toHaveTextContent("WEBHOOK_SECRET=");
+    expect(screen.getByLabelText("Signing secret")).toHaveValue("generated-secret-1234567890");
   });
 
   it("continues a webhook source: a refused delivery wins over an older one, and a new secret waits for a new delivery", async () => {
@@ -295,8 +301,7 @@ describe("setup guides", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Generate a new secret" }));
-    await user.click(await screen.findByRole("button", { name: "Copy both lines" }));
-    expect(await navigator.clipboard.readText()).toContain("WEBHOOK_SECRET=new-secret-1234567890");
+    expect(await screen.findByLabelText("Signing secret")).toHaveValue("new-secret-1234567890");
     // The old failure and the old delivery no longer count.
     expect(screen.getByText("Waiting for Logbook…")).toBeInTheDocument();
     stored = {

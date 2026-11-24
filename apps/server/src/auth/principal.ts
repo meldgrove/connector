@@ -31,6 +31,32 @@ export type ServicePrincipal = {
 
 export type Principal = UserPrincipal | ServicePrincipal;
 
+const OPERATOR = Symbol("operator");
+
+/**
+ * Whoever runs the operator command (`cli …`) on the server, with an admin's
+ * rights over sources, service tokens and SCIM tokens. Not a `Principal`:
+ * only the command creates one (src/cli), and a request carries no symbol,
+ * so no route can stand for it.
+ */
+export type OperatorPrincipal = {
+  readonly [OPERATOR]: true;
+  /** The command without its body, e.g. `cli settings apply sources`, for the audit log. */
+  readonly command: string;
+};
+
+/** Who changes something: an admin in the web app or the operator command. */
+export type Actor = UserPrincipal | OperatorPrincipal;
+
+/** The operator running `command`. Command line only. */
+export function operator(command: string): OperatorPrincipal {
+  return { [OPERATOR]: true, command };
+}
+
+export function isOperator(actor: unknown): actor is OperatorPrincipal {
+  return typeof actor === "object" && actor !== null && OPERATOR in actor;
+}
+
 /** A short name for logs and lists: "Ada Lovelace" or "Ada Lovelace via Claude". */
 export function principalLabel(principal: Principal): string {
   if (principal.kind === "service") return principal.name;

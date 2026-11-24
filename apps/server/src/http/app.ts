@@ -4,7 +4,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { bodyLimit } from "hono/body-limit";
 import { ZodError } from "zod";
 import type { AppEnv } from "./env";
-import { AppError, zodFieldErrors } from "./errors";
+import { AppError, CONCURRENT_CHANGE_CODES, databaseErrorCode, zodFieldErrors } from "./errors";
 import { authenticate, requestId, requestLog, sameOrigin } from "./middleware";
 import { compression } from "./compression";
 import { webApp } from "./static";
@@ -30,24 +30,6 @@ const AUTH_ROUTES = new Set([
   "POST /api/auth/sign-out",
   "GET /api/auth/error",
 ]);
-
-/**
- * PostgreSQL errors of a request that ran into another one at the same time:
- * unique violation (e.g. two creates at one path), deadlock, serialization
- * failure. Trying again gives the right answer.
- */
-const CONCURRENT_CHANGE_CODES = new Set(["23505", "40P01", "40001"]);
-
-/** The SQLSTATE of a database error, also when Drizzle wrapped it (`cause`). */
-function databaseErrorCode(error: unknown): string | undefined {
-  let current = error;
-  for (let depth = 0; depth < 3 && current instanceof Error; depth += 1) {
-    const code = (current as { code?: unknown }).code;
-    if (typeof code === "string") return code;
-    current = current.cause;
-  }
-  return undefined;
-}
 
 /**
  * A 409 for a request that ran into a concurrent change; null for other

@@ -105,6 +105,17 @@ jobs:
     name: Docker image
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: connector
+          POSTGRES_PASSWORD: connector
+          POSTGRES_DB: connector
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U connector -d connector"
+          --health-interval 5s --health-timeout 3s --health-retries 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: docker build -t connector:ci .
@@ -113,6 +124,20 @@ jobs:
       - name: The image starts its processes
         run: |
           docker run --rm --entrypoint node connector:ci --import /app/apps/server/dist/instrument.mjs -e "process.exit(0)"
+      - name: The operator command runs in the image, also from the PATH
+        run: |
+          image=(
+            docker run --rm --network host
+            -e DATABASE_URL=postgres://connector:connector@localhost:5432/connector
+            -e APP_URL=https://connector.example.invalid
+            -e AUTH_SECRET="$(openssl rand -base64 32)" -e ENCRYPTION_KEY="$(openssl rand -base64 32)"
+            -e OIDC_ISSUER=https://sso.example.invalid/realms/connector
+            -e OIDC_CLIENT_ID=connector -e OIDC_CLIENT_SECRET=ci-only
+          )
+          "${image[@]}" connector:ci migrate
+          "${image[@]}" connector:ci cli help | grep -q "cli settings apply"
+          # `cli` is on the PATH too (docker compose exec web cli …).
+          "${image[@]}" --entrypoint cli connector:ci settings list | grep -Eq '^sources +not set'
 
   # A new image must start with the compose files that servers have: those
   # of the newest release (branch stable). Shared Meldgrove workflow

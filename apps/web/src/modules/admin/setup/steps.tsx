@@ -83,39 +83,6 @@ export function CopyRow(props: {
   );
 }
 
-/** What a secret value of an `EnvBlock` shows instead of itself. */
-const HIDDEN = "•".repeat(16);
-
-/**
- * Lines for an app's environment (`NAME=value`), with one button that copies
- * them all. A line marked secret shows dots; the button copies its value, and
- * a hidden field below with the eye button shows it.
- */
-export function EnvBlock(props: {
-  lines: [name: string, value: string, secret?: boolean][];
-  copyLabel: string;
-  testId?: string;
-}) {
-  const text = props.lines.map(([name, value]) => `${name}=${value}`).join("\n");
-  const shown = props.lines.map(([name, value, secret]) => `${name}=${secret ? HIDDEN : value}`).join("\n");
-  return (
-    <div className="space-y-2">
-      <pre
-        className="bg-muted overflow-x-auto rounded-md px-3 py-2 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap"
-        data-testid={props.testId}
-      >
-        {shown}
-      </pre>
-      <CopyButton text={text} label={props.copyLabel} />
-      {props.lines
-        .filter(([, , secret]) => secret)
-        .map(([name, value]) => (
-          <CopyRow key={name} label={name} value={value} secret />
-        ))}
-    </div>
-  );
-}
-
 /** The outcome of a test or a wait: working, failing, or still waiting. */
 export function Outcome(props: {
   state: "ok" | "failed" | "waiting";

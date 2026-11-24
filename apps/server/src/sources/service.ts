@@ -5,7 +5,7 @@ import { SOURCE_KIND_INFO, type SourceKind } from "@connector/shared/sources";
 import { config } from "../config";
 import type { Db } from "../db/client";
 import { items, linkRequests, sourceLinks, sources } from "../db/schema";
-import type { Principal, UserPrincipal } from "../auth/principal";
+import type { Actor, Principal } from "../auth/principal";
 import { decryptJson, encryptJson, secretHint, SecretDecryptionError } from "../core/crypto";
 import { audit } from "../core/audit";
 import { inAnyGroup } from "../directory/groups";
@@ -132,7 +132,7 @@ function cleanSecret(input: Record<string, unknown>): Record<string, string> {
   );
 }
 
-export async function createSource(db: Db, actor: UserPrincipal, input: SourceCreate): Promise<Source> {
+export async function createSource(db: Db, actor: Actor, input: SourceCreate): Promise<Source> {
   if (await sourceBySlug(db, input.slug)) {
     throw validationError({ slug: "Another source has this slug" }, "Another source has this slug");
   }
@@ -165,12 +165,7 @@ export async function createSource(db: Db, actor: UserPrincipal, input: SourceCr
   return sourceView(db, row);
 }
 
-export async function updateSource(
-  db: Db,
-  actor: UserPrincipal,
-  id: string,
-  input: SourceUpdate,
-): Promise<Source> {
+export async function updateSource(db: Db, actor: Actor, id: string, input: SourceUpdate): Promise<Source> {
   const row = await getSource(db, id);
   const kind = KINDS[kindOf(row)];
   const set: Partial<typeof sources.$inferInsert> = { updatedAt: new Date() };
@@ -254,7 +249,7 @@ export async function updateSource(
   return sourceView(db, updated!);
 }
 
-export async function deleteSource(db: Db, actor: UserPrincipal, id: string): Promise<void> {
+export async function deleteSource(db: Db, actor: Actor, id: string): Promise<void> {
   const row = await getSource(db, id);
   await db.transaction(async (tx) => {
     // Items, linked accounts and link requests go with it (foreign keys).
@@ -275,7 +270,7 @@ export async function deleteSource(db: Db, actor: UserPrincipal, id: string): Pr
  */
 export async function rotateWebhookSecret(
   db: Db,
-  actor: UserPrincipal,
+  actor: Actor,
   id: string,
 ): Promise<{ webhookSecret: string; createdAt: string }> {
   const row = await getSource(db, id);
