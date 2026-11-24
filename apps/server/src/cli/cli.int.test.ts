@@ -303,7 +303,7 @@ describe("cli tokens create webhook-secret", () => {
     const id = added.json().id as string;
     expect(added.stderr).toBe(
       `Connected the source Logbook. ID: ${id}\n` +
-        `Next: (umask 077; docker compose exec -T web cli tokens create webhook-secret --source ${id} > secret.txt), then the secret and the URL http://localhost:3000/hooks/logbook in Meldgrove Logbook.\n`,
+        `Next: (umask 077; set -C; docker compose exec -T web cli tokens create webhook-secret --source ${id} > secret.txt), then the secret and the URL http://localhost:3000/hooks/logbook in Meldgrove Logbook.\n`,
     );
     expect((await cli(["settings", "list"])).stdout).toBe(
       `sources --id ${id}  incomplete  Meldgrove Logbook "Logbook" (logbook); https://logbook.example.org; everyone signed in; no webhook secret; webhook http://localhost:3000/hooks/logbook; no delivery yet\n`,
@@ -404,11 +404,11 @@ describe("cli tokens", () => {
     const listed = await cli(["tokens", "list"]);
     expect(listed.stdout).toMatch(
       new RegExp(
-        `^service ${row!.id} {2}active {6}Support bot; cn_svc_.{4}…; created \\d{4}-\\d\\d-\\d\\d; last used \\d{4}-\\d\\d-\\d\\d; expires ${expires}\n$`,
+        `^service ${row!.id} {2}active {6}Support bot; cn_svc_.{4}…; created \\d{4}-\\d\\d-\\d\\d by Operator; last used \\d{4}-\\d\\d-\\d\\d; expires ${expires}\n$`,
       ),
     );
     expect((await cli(["tokens", "list", "--json"])).json()).toEqual([
-      expect.objectContaining({ kind: "service", id: row!.id, createdBy: null }),
+      expect.objectContaining({ kind: "service", id: row!.id, createdBy: "Operator" }),
     ]);
 
     expect(await cli(["tokens", "revoke", row!.id])).toMatchObject({
@@ -474,7 +474,7 @@ describe("cli usage", () => {
       "cli settings apply sources",
       "cli settings test sources --id <id>",
       "cli settings remove sources --id <id>",
-      "(umask 077; docker compose exec -T web cli tokens create <kind> … > token.txt)",
+      "(umask 077; set -C; docker compose exec -T web cli tokens create <kind> … > token.txt)",
       "cli tokens create service",
       "cli tokens create scim",
       "cli tokens create webhook-secret --source <id>",

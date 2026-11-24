@@ -17,7 +17,7 @@ function help(): string {
   return `Meldgrove Connector: the operator command. On a server with compose.yaml:
   docker compose run --rm -T migrate cli <command>
 A command that prints a secret, so that Docker's logs do not keep it:
-  (umask 077; docker compose exec -T web cli tokens create <kind> … > token.txt)
+  (umask 077; set -C; docker compose exec -T web cli tokens create <kind> … > token.txt)
 In a terminal of the app's container (Coolify): cli <command>
 
 Settings:
