@@ -146,7 +146,7 @@ jobs:
     name: Compose files of the newest release
     permissions:
       contents: read
-    uses: meldgrove/.github/.github/workflows/compose-compat.yml@401e2112820727724d7143307850eaeceac6d5f0 # v1.2.0
+    uses: meldgrove/.github/.github/workflows/compose-compat.yml@59d337a835dc775663d1efe39867e9c257fe7c48 # v1.3.0
     with:
       version_variable: CONNECTOR_VERSION
       env_file: .github/compose-compat.env
