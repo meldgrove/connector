@@ -79,6 +79,9 @@ packages/shared/src/  contracts, source kinds and order, limits
 - **UI components** come from `@meldgrove/ui` (`@meldgrove/ui/<name>`, `cn`
   from `@meldgrove/ui/utils`); the app keeps no copies. A missing component or
   a fix goes into that package.
+- **Update routes** (`modules/updates.ts`) come from
+  `@meldgrove/ui/updates/server`, which checks their body and asks the
+  updater; Connector checks the admin first. The app keeps no updater client.
 - **Errors:** throw `AppError` helpers (`http/errors.ts`) with short, plain
   messages.
 - **Logging:** `logger` with ids and codes; never item texts, titles,

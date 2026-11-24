@@ -46,7 +46,9 @@ npm run test:e2e          # needs compose.dev.yaml and a build; see e2e/README.m
 
 CI runs all of them, checks that the migrations match the schema, audits the
 production dependencies, runs the browser tests against Keycloak and builds
-the Docker image.
+the Docker image. It also starts that image with the compose files of the
+newest release (branch `stable`, settings in `.github/compose-compat.env`):
+servers keep their compose files when the updater installs a new image.
 
 ## Database changes
 
