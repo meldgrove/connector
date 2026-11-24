@@ -9,6 +9,9 @@ import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
 const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+// @meldgrove/ui is a root devDependency, not one of the server's: esbuild
+// bundles @meldgrove/ui/updates/server, and the image's production install
+// leaves out the package and its React peers.
 const external = Object.keys(pkg.dependencies).filter((name) => !name.startsWith("@connector/"));
 
 await rm(path.join(root, "dist"), { recursive: true, force: true });
