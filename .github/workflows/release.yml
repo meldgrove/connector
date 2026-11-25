@@ -56,7 +56,7 @@ jobs:
       description: "The memory layer of the Meldgrove apps: one MCP connection for Claude, ChatGPT, Le Chat and other agents to Handbook, Logbook, Library and CRM, with permissions checked before anything is returned and every result linked to its source. Sign-in with Keycloak or any OpenID Connect provider; people and groups by SCIM 2.0."
       # Releases upload their source maps to this Sentry project, with the
       # SENTRY_AUTH_TOKEN secret (an organization token).
-      sentry_org: meldgrove
+      sentry_org: projecttogether
       sentry_project: connector
     secrets:
       SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
